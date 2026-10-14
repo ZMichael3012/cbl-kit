@@ -87,6 +87,7 @@ powershell -File ../../scripts/check-no-emdash.ps1 -Root .
 | CBL | Дата | Статус | Спека | Коммит |
 | :-- | :-- | :-- | :-- | :-- |
 | CBL-1.1 - 1.6 | 2026-10-14 | done, ревью W1 закрыто (unit+integration: outbox 82.8%, inbox 85.0%, money 96.3%; DLQ для poison-сообщений, storagex, таймаут доставки Kafka) | `.specs/CBL-1.*.md` | ожидает коммита |
+| CBL-1.3 (fix) | 2026-10-14 | done, находки ревью 2.7: DLQ-фолбэки для poison-сообщений (невалидный event_id санитизируется в `x-original-event-id`; отсутствующий event_type -> `unknown`; битый конверт повтора уходит в DLQ, а не зацикливает партицию) | `inbox/processor.go`, тесты inbox | этот коммит |
 
 ## 9. Runbook
 

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
@@ -93,7 +94,10 @@ func (p *Processor) Process(ctx context.Context, msg Message) error {
 	destination, isDLQ := p.router.Next(msg.Topic, attempt)
 	env, envErr := p.retryEnvelope(msg, destination, attempt, err)
 	if envErr != nil {
-		return errors.Join(err, envErr)
+		// Конверт повтора не собрать (битый event_id или отсутствующий event_type):
+		// редоставка такого сообщения зациклила бы партицию, поэтому оно уходит
+		// в DLQ с санитизацией служебных полей.
+		return p.sendToDLQ(ctx, msg, errors.Join(err, envErr))
 	}
 	if pubErr := p.pub.Publish(ctx, env); pubErr != nil {
 		return errors.Join(err, fmt.Errorf("inbox: publish retry: %w", pubErr))
@@ -117,12 +121,14 @@ func (p *Processor) Process(ctx context.Context, msg Message) error {
 
 // sendToDLQ публикует необрабатываемое сообщение в DLQ и подтверждает исходное.
 // Публикация невозможна без publisher: тогда ошибка возвращается, чтобы сообщение
-// не потерялось молча.
+// не потерялось молча. Невалидный event_id заменяется свежим UUIDv7 (исходное
+// значение сохраняется в x-original-event-id), отсутствующий event_type - "unknown",
+// иначе DLQ-конверт не прошел бы валидацию и сообщение зациклило бы партицию.
 func (p *Processor) sendToDLQ(ctx context.Context, msg Message, cause error) error {
 	if p.pub == nil {
 		return cause
 	}
-	headers := make(map[string]string, len(msg.Headers)+2)
+	headers := make(map[string]string, len(msg.Headers)+3)
 	for k, v := range msg.Headers {
 		headers[k] = v
 	}
@@ -138,6 +144,12 @@ func (p *Processor) sendToDLQ(ctx context.Context, msg Message, cause error) err
 	payload := msg.Value
 	if len(payload) == 0 {
 		payload = []byte("{}")
+	}
+	if _, err := uuid.Parse(strings.TrimSpace(headers[outbox.HeaderEventID])); err != nil {
+		if original := strings.TrimSpace(headers[outbox.HeaderEventID]); original != "" {
+			headers[HeaderOriginalEventID] = original
+		}
+		delete(headers, outbox.HeaderEventID)
 	}
 	destination := MainTopicFrom(msg.Topic) + DLQSuffix
 	env, err := outbox.NewEnvelope(eventType, destination, key, headers, payload)

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -201,4 +202,55 @@ func TestIntegrationPoisonMessageToDLQ(t *testing.T) {
 	var inboxCount int64
 	require.NoError(t, db.Model(&inbox.Record{}).Count(&inboxCount).Error)
 	assert.Equal(t, int64(0), inboxCount)
+}
+
+func TestIntegrationInvalidEventIDToDLQ(t *testing.T) {
+	db := setupInboxDB(t)
+	pub := &recordingPublisher{}
+	processor := inbox.NewProcessor("payment", db, inbox.NewGuard(), &flakyHandler{}, pub, inbox.NewRouter("payment.events", 3), zap.NewNop())
+
+	// event_id не UUID: конверт повтора не собрать, сообщение обязано уйти в DLQ
+	// с санитизированным event_id, а не зациклить партицию.
+	msg := inbox.Message{
+		Topic: "payment.events",
+		Key:   "pay-1",
+		Headers: map[string]string{
+			"event_id":   "pay-1",
+			"event_type": "payment.completed",
+		},
+		Value: []byte("{}"),
+	}
+	require.NoError(t, processor.Process(context.Background(), msg))
+
+	events := pub.events()
+	require.Len(t, events, 1)
+	assert.Equal(t, "payment.events.dlq", events[0].Topic)
+	assert.Equal(t, "pay-1", events[0].Headers[inbox.HeaderOriginalEventID])
+	assert.NotEqual(t, "pay-1", events[0].EventID, "DLQ-конверт получает валидный event_id")
+	assert.NotEmpty(t, events[0].Headers[inbox.HeaderError])
+}
+
+func TestIntegrationMissingEventTypeToDLQ(t *testing.T) {
+	db := setupInboxDB(t)
+	pub := &recordingPublisher{}
+	processor := inbox.NewProcessor("payment", db, inbox.NewGuard(), &flakyHandler{failTimes: 10}, pub, inbox.NewRouter("payment.events", 3), zap.NewNop())
+
+	_, err := outbox.NewEnvelope("", "payment.events", "pay-1", nil, []byte("{}"))
+	require.Error(t, err, "конверт без event_type не собирается")
+
+	msg := inbox.Message{
+		Topic: "payment.events",
+		Key:   "pay-1",
+		Headers: map[string]string{
+			"event_id": uuid.Must(uuid.NewV7()).String(),
+		},
+		Value: []byte("{}"),
+	}
+	require.NoError(t, processor.Process(context.Background(), msg))
+
+	events := pub.events()
+	require.Len(t, events, 1)
+	assert.Equal(t, "payment.events.dlq", events[0].Topic)
+	assert.Equal(t, "unknown", events[0].Headers[outbox.HeaderEventType])
+	assert.NotEmpty(t, events[0].Headers[inbox.HeaderError])
 }

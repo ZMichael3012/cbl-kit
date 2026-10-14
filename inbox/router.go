@@ -23,6 +23,8 @@ const (
 	HeaderRetryAttempt = "x-retry-attempt"
 	// HeaderError задает текст последней ошибки обработки.
 	HeaderError = "x-error"
+	// HeaderOriginalEventID сохраняет исходный event_id при санитизации DLQ.
+	HeaderOriginalEventID = "x-original-event-id"
 )
 
 // Router маршрутизирует неуспешные сообщения в retry-топики и DLQ.
