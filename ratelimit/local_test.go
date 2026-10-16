@@ -91,11 +91,43 @@ func TestLocalBurstCapAfterIdle(t *testing.T) {
 	limiter, clock := newLocalLimiter(t, 3, time.Second)
 	ctx := context.Background()
 
-	clock.Advance(time.Hour)
+	clock.Advance(4 * time.Hour)
 	got, err := limiter.Allow(ctx, "key")
 	require.NoError(t, err)
 	require.True(t, got.Allowed)
 	require.Equal(t, 2, got.Remaining)
+}
+
+func TestLocalLongInterval(t *testing.T) {
+	t.Parallel()
+	limiter, clock := newLocalLimiter(t, 1, 4*time.Hour)
+	ctx := context.Background()
+
+	first, err := limiter.Allow(ctx, "key")
+	require.NoError(t, err)
+	require.True(t, first.Allowed)
+
+	denied, err := limiter.Allow(ctx, "key")
+	require.NoError(t, err)
+	require.False(t, denied.Allowed)
+	require.Equal(t, 4*time.Hour, denied.RetryAfter)
+
+	clock.Advance(8 * time.Hour)
+	recovered, err := limiter.Allow(ctx, "key")
+	require.NoError(t, err)
+	require.True(t, recovered.Allowed)
+}
+
+func TestLocalZeroPause(t *testing.T) {
+	t.Parallel()
+	limiter, _ := newLocalLimiter(t, 5, time.Second)
+	ctx := context.Background()
+
+	require.NoError(t, limiter.Pause(ctx, "key", 0))
+	got, err := limiter.Allow(ctx, "key")
+	require.NoError(t, err)
+	require.True(t, got.Allowed)
+	require.Equal(t, 0, got.Remaining)
 }
 
 func TestLocalPause(t *testing.T) {

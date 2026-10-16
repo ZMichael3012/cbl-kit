@@ -47,14 +47,24 @@ func (w *WithFallback) Allow(ctx context.Context, key string) (Decision, error) 
 	decision, err := w.primary.Allow(ctx, key)
 	if err != nil {
 		w.metrics.ObserveError(key, err, true)
-		return w.fallback.Allow(ctx, key)
+		decision, err = w.fallback.Allow(ctx, key)
+		if err != nil {
+			return Decision{}, err
+		}
+		w.report(key, decision)
+		return decision, nil
 	}
+	w.report(key, decision)
+	return decision, nil
+}
+
+// report records the served decision, whichever limiter produced it.
+func (w *WithFallback) report(key string, decision Decision) {
 	if decision.Allowed {
 		w.metrics.ObserveAllowed(key, decision.Remaining)
 	} else {
 		w.metrics.ObserveDenied(key, decision.RetryAfter)
 	}
-	return decision, nil
 }
 
 // Pause implements Limiter.

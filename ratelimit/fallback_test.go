@@ -85,6 +85,7 @@ func TestWithFallbackSwitchesOnError(t *testing.T) {
 	require.Equal(t, 1, fallback.allowHits)
 	require.Equal(t, 1, metrics.errors)
 	require.Equal(t, 1, metrics.fallback)
+	require.Equal(t, 1, metrics.allowed)
 }
 
 func TestWithFallbackPause(t *testing.T) {

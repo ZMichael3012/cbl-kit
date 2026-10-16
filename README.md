@@ -1,17 +1,20 @@
 # cbl-kit
 
-Shared Go library of the CBL platform: money type, HMAC signing, Gin and gRPC
-middleware, transactional outbox, and idempotent inbox.
+Shared Go library of the CBL platform: money type, HMAC signing, provider webhook
+verification, rate limiting, Gin and gRPC middleware, transactional outbox, and
+idempotent inbox.
 
 Repository rules and conventions: `AGENTS.md`, global rules `../../AGENTS.md`.
-Task specs: `.specs/CBL-1.*.md`.
+Task specs: `.specs/CBL-1.*.md`, `.specs/CBL-17.3-kit-primitives.md`.
 
 ## Packages
 
 | Package | Purpose |
 | :-- | :-- |
-| `money` | Money type int64 + decimals, float forbidden |
-| `hmac` | Webhook signing over the raw body, replay window |
+| `money` | Money type int64 + decimals, float forbidden, float-free provider parsing |
+| `hmac` | Outbound webhook signing over the raw body, replay window |
+| `webhooksig` | Inbound provider verification: raw HMAC, canonical JSON HMAC, token echo |
+| `ratelimit` | Redis token bucket with a local fallback and Retry-After helpers |
 | `ginmw` | request_id, problem+json, access log, recovery |
 | `grpcmw` | Interceptors and domain error mapping |
 | `outbox` | Event write within a transaction, relay, kafkapub |
@@ -23,7 +26,7 @@ Task specs: `.specs/CBL-1.*.md`.
 go build ./...
 go vet ./...
 go test ./... -cover
-go test -tags integration ./outbox/... ./inbox/...   # requires Docker (testcontainers)
+go test -tags integration ./outbox/... ./inbox/... ./ratelimit/...   # requires Docker (testcontainers)
 ```
 
 ## Migrations

@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/bits"
 	"strings"
 	"time"
 )
@@ -28,12 +29,17 @@ var (
 // tokenScale micro-units, so partial refills stay exact without floats.
 const tokenScale int64 = 1_000_000
 
+// maxBurst bounds the bucket capacity: provider bursts are in the hundreds, the
+// cap keeps the fixed-point arithmetic (burst * tokenScale) far from int64 limits.
+const maxBurst = 1_000_000
+
 // Config configures a token bucket: one token refills every RefillInterval and
 // the bucket holds at most Burst tokens.
 type Config struct {
-	// RefillInterval sets the time to refill one token.
+	// RefillInterval sets the time to refill one token; it must be at least one
+	// microsecond, the granularity shared with the Redis form.
 	RefillInterval time.Duration
-	// Burst sets the bucket capacity.
+	// Burst sets the bucket capacity; it must be positive and at most maxBurst.
 	Burst int
 }
 
@@ -42,7 +48,7 @@ func (c Config) validate() error {
 	if c.RefillInterval < time.Microsecond {
 		return fmt.Errorf("%w: refill interval %s", ErrInvalidConfig, c.RefillInterval)
 	}
-	if c.Burst <= 0 {
+	if c.Burst <= 0 || c.Burst > maxBurst {
 		return fmt.Errorf("%w: burst %d", ErrInvalidConfig, c.Burst)
 	}
 	return nil
@@ -58,7 +64,9 @@ type Decision struct {
 	Remaining int
 }
 
-// Limiter is a token bucket over arbitrary keys.
+// Limiter is a token bucket over arbitrary keys. Keys are logical identifiers
+// chosen by the caller (for example provider:operation for the connector); the
+// Redis form prefixes them with rl:provider: (CBL-003 section 7).
 type Limiter interface {
 	// Allow consumes one token from the bucket of key.
 	Allow(ctx context.Context, key string) (Decision, error)
@@ -92,6 +100,27 @@ func validateKey(key string) error {
 // the bucket baseline lies in the future.
 func retryAfter(tokens int64, interval time.Duration, paused time.Duration) time.Duration {
 	missing := tokenScale - tokens
-	wait := time.Duration((missing*int64(interval) + tokenScale - 1) / tokenScale)
+	wait := time.Duration(mulDivCeil(missing, int64(interval), tokenScale))
 	return wait + paused
+}
+
+// mulDiv returns floor(a*b/d) for a, b >= 0 and d > 0 through 128-bit
+// intermediate math, so large intervals cannot overflow int64. The callers keep
+// the quotient below 2^64 (token arithmetic with a >= d or a < d bounded by
+// tokenScale), so bits.Div64 never panics.
+func mulDiv(a, b, d int64) int64 {
+	hi, lo := bits.Mul64(uint64(a), uint64(b))   //nolint:gosec // G115: a and b are non-negative by the contract
+	quotient, _ := bits.Div64(hi, lo, uint64(d)) //nolint:gosec // G115: d is positive by the contract
+	return int64(quotient)                       //nolint:gosec // G115: the quotient fits int64 by the caller domain
+}
+
+// mulDivCeil returns ceil(a*b/d) with the same preconditions as mulDiv; the
+// ceiling keeps the reported wait from ever understating the real one.
+func mulDivCeil(a, b, d int64) int64 {
+	hi, lo := bits.Mul64(uint64(a), uint64(b))           //nolint:gosec // G115: a and b are non-negative by the contract
+	quotient, remainder := bits.Div64(hi, lo, uint64(d)) //nolint:gosec // G115: d is positive by the contract
+	if remainder > 0 {
+		quotient++
+	}
+	return int64(quotient) //nolint:gosec // G115: the quotient fits int64 by the caller domain
 }

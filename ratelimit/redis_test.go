@@ -73,7 +73,7 @@ func TestRedisStateIsSharedBetweenInstances(t *testing.T) {
 
 func TestRedisPause(t *testing.T) {
 	t.Parallel()
-	limiter, _, clock := newRedisLimiter(t, 5, time.Second)
+	limiter, server, clock := newRedisLimiter(t, 5, time.Second)
 	ctx := context.Background()
 
 	require.NoError(t, limiter.Pause(ctx, "coingate:invoice", 2*time.Second))
@@ -83,6 +83,28 @@ func TestRedisPause(t *testing.T) {
 	require.Equal(t, 2*time.Second, denied.RetryAfter)
 
 	clock.Advance(2 * time.Second)
+	recovered, err := limiter.Allow(ctx, "coingate:invoice")
+	require.NoError(t, err)
+	require.True(t, recovered.Allowed)
+
+	server.FastForward(time.Second)
+}
+
+func TestRedisPauseSurvivesAllowTTLRefresh(t *testing.T) {
+	t.Parallel()
+	limiter, server, clock := newRedisLimiter(t, 2, time.Second)
+	ctx := context.Background()
+
+	require.NoError(t, limiter.Pause(ctx, "coingate:invoice", 30*time.Second))
+	denied, err := limiter.Allow(ctx, "coingate:invoice")
+	require.NoError(t, err)
+	require.False(t, denied.Allowed)
+
+	// The allow call must not shorten the key retention below the pause: a
+	// shorter TTL would let the bucket expire and reset, bypassing the pause.
+	require.Greater(t, server.TTL("rl:provider:coingate:invoice"), 29*time.Second)
+
+	clock.Advance(30 * time.Second)
 	recovered, err := limiter.Allow(ctx, "coingate:invoice")
 	require.NoError(t, err)
 	require.True(t, recovered.Allowed)

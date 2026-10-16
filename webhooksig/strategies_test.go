@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -44,6 +45,9 @@ func TestRawHMACHexWithPrefix(t *testing.T) {
 
 	badHex := webhooksig.Request{Header: header("Btcpay-Sig", "sha256=zzzz"), Body: body}
 	require.ErrorIs(t, strategy.Verify(secret, badHex), webhooksig.ErrMalformed)
+
+	longGarbage := webhooksig.Request{Header: header("Btcpay-Sig", "sha256="+strings.Repeat("z", 200)), Body: body}
+	require.ErrorIs(t, strategy.Verify(secret, longGarbage), webhooksig.ErrMalformed)
 
 	require.ErrorIs(t, strategy.Verify(nil, req), webhooksig.ErrMalformed)
 
@@ -94,6 +98,20 @@ func TestCanonicalJSONHMAC(t *testing.T) {
 	require.ErrorIs(t, strategy.Verify(secret, broken), webhooksig.ErrMalformed)
 }
 
+func TestCanonicalJSONHMACBase64(t *testing.T) {
+	t.Parallel()
+	secret := []byte("now-secret")
+	body := []byte(`{"price_amount": 10.5, "order_id": "a"}`)
+	canonical, err := webhooksig.CanonicalJSON(body)
+	require.NoError(t, err)
+	mac := hmac.New(sha512.New, secret)
+	mac.Write(canonical)
+
+	strategy := webhooksig.CanonicalJSONHMAC{Header: "X-Sig", Algorithm: webhooksig.SHA512, Encoding: webhooksig.Base64}
+	req := webhooksig.Request{Header: header("x-sig", base64.StdEncoding.EncodeToString(mac.Sum(nil))), Body: body}
+	require.NoError(t, strategy.Verify(secret, req))
+}
+
 func TestTokenEcho(t *testing.T) {
 	t.Parallel()
 	secret := []byte("echo-token")
@@ -105,8 +123,9 @@ func TestTokenEcho(t *testing.T) {
 
 	require.ErrorIs(t, strategy.Verify([]byte("nope"), req), webhooksig.ErrEchoMismatch)
 
-	custom := webhooksig.TokenEcho{Field: "token"}
-	require.NoError(t, custom.Verify(secret, req))
+	customBody := []byte(`{"payment_token":"echo-token"}`)
+	custom := webhooksig.TokenEcho{Field: "payment_token"}
+	require.NoError(t, custom.Verify(secret, webhooksig.Request{Body: customBody}))
 
 	missing := webhooksig.Request{Body: []byte(`{"order_id":1}`)}
 	require.ErrorIs(t, strategy.Verify(secret, missing), webhooksig.ErrSignatureAbsent)
@@ -116,6 +135,15 @@ func TestTokenEcho(t *testing.T) {
 
 	broken := webhooksig.Request{Body: []byte(`{`)}
 	require.ErrorIs(t, strategy.Verify(secret, broken), webhooksig.ErrMalformed)
+
+	notObject := webhooksig.Request{Body: []byte(`["token"]`)}
+	require.ErrorIs(t, strategy.Verify(secret, notObject), webhooksig.ErrMalformed)
+
+	trailing := webhooksig.Request{Body: []byte(`{"token":"echo-token"} garbage`)}
+	require.ErrorIs(t, strategy.Verify(secret, trailing), webhooksig.ErrMalformed)
+
+	duplicate := webhooksig.Request{Body: []byte(`{"token":"echo-token","token":"echo-token"}`)}
+	require.ErrorIs(t, strategy.Verify(secret, duplicate), webhooksig.ErrMalformed)
 
 	require.ErrorIs(t, strategy.Verify(nil, req), webhooksig.ErrMalformed)
 }

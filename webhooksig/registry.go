@@ -2,6 +2,7 @@ package webhooksig
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 )
@@ -18,14 +19,14 @@ func NewRegistry() *Registry {
 }
 
 // Register adds the strategy of a provider; an empty provider, a nil strategy
-// or a duplicate registration is an error, because duplicates hide configuration
-// mistakes (a reload builds a fresh registry).
+// (including a typed nil) or a duplicate registration is an error, because
+// duplicates hide configuration mistakes (a reload builds a fresh registry).
 func (r *Registry) Register(provider string, strategy Strategy) error {
 	provider = strings.TrimSpace(provider)
 	if provider == "" {
 		return fmt.Errorf("%w: empty provider", ErrMalformed)
 	}
-	if strategy == nil {
+	if isNilStrategy(strategy) {
 		return fmt.Errorf("%w: nil strategy for %q", ErrMalformed, provider)
 	}
 	r.mu.Lock()
@@ -37,10 +38,26 @@ func (r *Registry) Register(provider string, strategy Strategy) error {
 	return nil
 }
 
-// Lookup returns the strategy registered for the provider.
+// Lookup returns the strategy registered for the provider; the provider name is
+// normalized the same way as in Register.
 func (r *Registry) Lookup(provider string) (Strategy, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	strategy, ok := r.strategies[provider]
+	strategy, ok := r.strategies[strings.TrimSpace(provider)]
 	return strategy, ok
+}
+
+// isNilStrategy reports a nil interface or a typed nil pointer, which would
+// otherwise pass the interface comparison and panic on Verify.
+func isNilStrategy(strategy Strategy) bool {
+	if strategy == nil {
+		return true
+	}
+	value := reflect.ValueOf(strategy)
+	switch value.Kind() {
+	case reflect.Pointer, reflect.Interface, reflect.Map, reflect.Slice, reflect.Chan, reflect.Func:
+		return value.IsNil()
+	default:
+		return false
+	}
 }

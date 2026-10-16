@@ -19,10 +19,16 @@ func TestRegistry(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, strategy, got)
 
+	_, ok = registry.Lookup("coingate ")
+	require.True(t, ok)
+
 	_, ok = registry.Lookup("unknown")
 	require.False(t, ok)
 
 	require.ErrorIs(t, registry.Register("coingate", strategy), webhooksig.ErrMalformed)
 	require.ErrorIs(t, registry.Register("", strategy), webhooksig.ErrMalformed)
 	require.ErrorIs(t, registry.Register("nil", nil), webhooksig.ErrMalformed)
+
+	var typedNil *webhooksig.TokenEcho
+	require.ErrorIs(t, registry.Register("typed-nil", typedNil), webhooksig.ErrMalformed)
 }

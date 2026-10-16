@@ -1,6 +1,7 @@
 package ratelimit_test
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -27,6 +28,8 @@ func TestParseRetryAfterSeconds(t *testing.T) {
 		{name: "fraction", value: "1.5", wantErr: true},
 		{name: "garbage", value: "abc", wantErr: true},
 		{name: "empty", value: "", wantErr: true},
+		{name: "huge seconds clamp", value: "9223372037", want: time.Duration(math.MaxInt64)},
+		{name: "absurd seconds clamp", value: "18446744074", want: time.Duration(math.MaxInt64)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

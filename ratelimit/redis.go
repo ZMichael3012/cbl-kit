@@ -59,20 +59,25 @@ else
   end
 end
 redis.call('HSET', KEYS[1], 'tokens', string.format('%d', tokens), 'updated', string.format('%d', updated))
-local ttl = math.ceil(burst * interval / 1000) + 1000
+local retention = burst * interval + (updated - now)
+if retention < 0 then
+  retention = 0
+end
+local ttl = math.ceil(retention / 1000) + 1000
 redis.call('PEXPIRE', KEYS[1], ttl)
 return {allowed, math.floor(retry), math.floor(tokens / scale)}
 `)
 
 // pauseScript empties the bucket and moves the baseline so the first token after
-// the pause appears exactly when the pause elapses.
+// the pause appears exactly when the pause elapses; pause arrives in
+// microseconds, the TTL is milliseconds.
 var pauseScript = redis.NewScript(`
 local now = tonumber(ARGV[1])
 local pause = tonumber(ARGV[2])
 local burst = tonumber(ARGV[3])
 local interval = tonumber(ARGV[4])
 redis.call('HSET', KEYS[1], 'tokens', '0', 'updated', string.format('%d', now + pause - interval))
-local ttl = math.ceil(burst * interval / 1000) + 1000 + pause
+local ttl = math.ceil(burst * interval / 1000) + 1000 + math.floor(pause / 1000)
 redis.call('PEXPIRE', KEYS[1], ttl)
 return 1
 `)

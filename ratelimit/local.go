@@ -9,7 +9,8 @@ import (
 
 // Local is an in-process token bucket. It cannot coordinate replicas, so it
 // serves as a fallback when Redis is unavailable and must be configured
-// conservatively (each replica holds its own bucket).
+// conservatively (each replica holds its own bucket). The bucket map keeps one
+// entry per key and is intended for a bounded key set (providers, credentials).
 type Local struct {
 	cfg     Config
 	now     func() time.Time
@@ -86,23 +87,33 @@ func (l *Local) bucket(key string, now time.Time) *bucketState {
 }
 
 // refill adds tokens for the elapsed time; while the bucket is paused the
-// baseline lies in the future and no tokens are added.
+// baseline lies in the future and no tokens are added. Whole refill steps are
+// counted first and partial time is converted through 128-bit math, so an
+// arbitrarily long idle period cannot overflow int64.
 func (l *Local) refill(state *bucketState, now time.Time) {
 	elapsed := now.Sub(state.updated)
 	if elapsed <= 0 {
 		return
 	}
-	added := int64(elapsed) * tokenScale / int64(l.cfg.RefillInterval)
-	maxTokens := int64(l.cfg.Burst) * tokenScale
-	if state.tokens+added >= maxTokens {
-		state.tokens = maxTokens
+	interval := int64(l.cfg.RefillInterval)
+	steps := int64(elapsed) / interval
+	if steps >= int64(l.cfg.Burst) {
+		state.tokens = int64(l.cfg.Burst) * tokenScale
 		state.updated = now
 		return
+	}
+	added := steps * tokenScale
+	consumed := steps * interval
+	partial := int64(elapsed) - consumed
+	if partial > 0 {
+		extra := mulDiv(partial, tokenScale, interval)
+		added += extra
+		consumed += mulDiv(extra, interval, tokenScale)
 	}
 	state.tokens += added
 	// Advance the baseline only by the time converted into whole tokens to keep
 	// the fractional part for the next refill.
-	state.updated = state.updated.Add(time.Duration(added * int64(l.cfg.RefillInterval) / tokenScale))
+	state.updated = state.updated.Add(time.Duration(consumed))
 }
 
 // wait computes the deny delay of the current state.

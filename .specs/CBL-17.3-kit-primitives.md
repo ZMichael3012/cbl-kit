@@ -32,13 +32,16 @@ FR-1. `money` (extend the existing package, additive):
 
 - `ParseJSONNumber(number json.Number, asset string, decimals uint32) (Money, error)`: exact
   parsing of a JSON number literal; the exponent form is allowed and handled by decimal point
-  shifting (no float). A value that needs more than `decimals` fractional digits is an error;
-  overflow is `ErrOverflow`.
+  shifting (no float); extreme exponents are classified before the shift arithmetic, so crafted
+  input can never overflow or panic. A value that needs more than `decimals` fractional digits
+  is an error; overflow is `ErrOverflow`; error messages quote at most 32 characters of the
+  literal.
 - `ParseAny(value any, asset string, decimals uint32) (Money, error)`: accepts `string` and
   `json.Number`; rejects `float64`/`float32` with the new sentinel `ErrFloatForbidden` (the
   decoder must use `json.Decoder.UseNumber`); other types are `ErrInvalidAmount`.
-- Existing `Parse`, `String`, arithmetics stay unchanged; the `money` package keeps coverage
-  at least 95%.
+- Existing `Parse` keeps its API and delegates to the shared parser; the shared parser accepts
+  trailing fractional zeros beyond the scale and leading zeros (CBL-1.1 FR-4), which is a
+  documented leniency fix over the old code; the `money` package keeps coverage at least 95%.
 
 FR-2. `webhooksig` (new package):
 
@@ -51,35 +54,44 @@ FR-2. `webhooksig` (new package):
 - `CanonicalJSONHMAC{Header, Algorithm, Encoding}`: HMAC over the canonical JSON form of the
   body (NOWPayments `x-nowpayments-sig`).
 - `TokenEcho{Field}` (default field `token`): constant-time comparison of the secret with the
-  body field (CoinGate); a mismatch is `ErrEchoMismatch`, a missing/non-string field or an
-  empty secret is `ErrMalformed`.
+  body field (CoinGate); the body must be exactly one JSON object, decoded with the same strict
+  decoder as the canonical form (duplicate keys and trailing data are `ErrMalformed`); a missing
+  field is `ErrSignatureAbsent`, a non-string field or an empty secret is `ErrMalformed`, a
+  token mismatch is `ErrEchoMismatch`.
 - `CanonicalJSON(raw []byte) ([]byte, error)`: deterministic compact JSON, object keys sorted,
-  HTML escaping off, number literals preserved as `json.Number`; shared by
-  `CanonicalJSONHMAC` and available to tests and mock profiles (17.5).
-- `Registry`: `Register(provider, strategy)` (empty provider, nil strategy or a duplicate is an
-  error) and `Lookup(provider) (Strategy, bool)`.
-- All digest comparisons use `hmac.Equal` or `subtle.ConstantTimeCompare`.
+  HTML escaping off, number literals preserved as `json.Number`, duplicate object keys and
+  trailing data rejected; shared by `CanonicalJSONHMAC` and available to tests and mock profiles
+  (17.5).
+- `Registry`: `Register(provider, strategy)` (empty provider, nil or typed-nil strategy, or a
+  duplicate is an error) and `Lookup(provider)`; both normalize the provider name.
+- All digest comparisons use `hmac.Equal` or `subtle.ConstantTimeCompare`; error messages quote
+  at most 64 characters of attacker-controlled values.
 
 FR-3. `ratelimit` (new package):
 
 - `Config{RefillInterval time.Duration; Burst int}`: one token per `RefillInterval`, capacity
-  `Burst`; validation errors for non-positive values. No floats anywhere (tokens are counted in
-  internal integer micro-units).
+  `Burst`; validation errors for intervals below one microsecond (the Redis granularity) and for
+  a burst outside (0, 1000000]. No floats anywhere: tokens are counted in internal integer
+  micro-units and all conversions use 128-bit intermediate math (`mulDiv`/`mulDivCeil`), so
+  arbitrarily long idle periods or refill intervals cannot overflow.
 - `Limiter` interface: `Allow(ctx, key) (Decision, error)` and `Pause(ctx, key, d) error`
   (honors a provider `Retry-After`); `Decision{Allowed bool; RetryAfter time.Duration;
-  Remaining int}`.
+  Remaining int}`; keys are logical provider:operation identifiers chosen by the caller.
 - `Local`: in-process token bucket (mutex), injectable clock (`NewLocalWithClock`), used as a
-  fallback and in tests.
-- `Redis`: shared bucket implemented as an atomic Lua script over `HSET`/`HMGET`/`PEXPIRE`
-  (no `TIME`; the caller clock is passed as an argument), constructor over `redis.Cmdable`
-  (go-redis v9); the key namespace is `rl:provider:<key>`; a full-refill TTL keeps idle buckets
-  from leaking.
+  fallback and in tests; the bucket map is intended for a bounded key set.
+- `Redis`: shared bucket implemented as an atomic Lua script over `HGET`/`HSET`/`PEXPIRE`
+  (no `TIME`; the caller clock is passed as an argument), constructor over `redis.Scripter`
+  (go-redis v9, the narrow interface needed by `Script.Run`); the key namespace is
+  `rl:provider:<key>`; the TTL covers a full refill plus any future pause baseline, so an
+  allow call can never shorten the retention below an active pause, and idle buckets do not leak.
 - `WithFallback{primary, fallback}`: on a primary error switches to the fallback and reports
-  through `Metrics`; the fallback is per-process and must be configured conservatively.
+  through `Metrics`; every served decision (primary or fallback) is reported as allowed/denied;
+  the fallback is per-process and must be configured conservatively.
 - `Metrics` interface (allowed, denied, error with the fallback flag); a nil metrics value is
   safe.
 - `ParseRetryAfter(value string, now time.Time) (time.Duration, error)`: delta-seconds or
-  HTTP-date; `FormatRetryAfter(d)` renders integer seconds rounded up, minimum 1.
+  HTTP-date; values too large for a duration are clamped to the maximum duration, never wrapped;
+  `FormatRetryAfter(d)` renders integer seconds rounded up, minimum 1.
 
 FR-4. Quality gates: unit tests for every requirement (table-driven, boundary cases: exponent
 forms, overflow, negative amounts, wrong digests, reordered JSON keys, HTML escapes, burst
@@ -95,9 +107,20 @@ Dependency note: the `ratelimit` package adds `redis/go-redis/v9` v9.23.0 at run
 reports no reachable vulnerabilities after the upgrade.
 
 FR-5. Documentation: AGENTS.md packages table, dependency list, trade-offs (`T-KK8` fixed-point
-token bucket without floats, `T-KK9` fallback limiter semantics) and the task journal; the
-umbrella records the CBL-003 section 7 key correction (`rl:provider:<provider>:<op>`, no
-window suffix in a token bucket) on instruction.
+token bucket without floats, `T-KK9` fallback limiter semantics), known issue `KI-K4` (caller
+clock and replica skew) and the task journal; the umbrella records the CBL-003 section 7 key
+correction (`rl:provider:<provider>:<op>`, no window suffix in a token bucket) on instruction.
+Delivery uses the local `replace` of this workspace (services already point at `../cbl-kit`);
+a repository tag is introduced when services switch to versioned dependencies (0.2/CI).
+
+Review closure (4 reviewers, 16.10.2026): no-context, architecture, with-context and security
+findings were closed by the follow-up commit: overflow-safe money exponent handling with
+extreme-exponent classification and literal truncation; 128-bit `mulDiv` in the local refill
+and retry math plus long-interval tests; Redis allow TTL retention over an active pause and
+pause TTL unit conversion; `Retry-After` clamping; strict JSON decoding with duplicate keys and
+trailing data; `TokenEcho` missing-field classification (spec corrected to `ErrSignatureAbsent`);
+registry `Lookup` normalization and typed-nil guard; fallback decision metrics; README/AGENTS
+sync.
 
 Out of scope: the HTTP resilience client extraction (17.2), provider manifests and the asset
 catalog (17.20 - 17.22), TOTP and ECDSA signing (17.6, 17.8), the ingress response policy

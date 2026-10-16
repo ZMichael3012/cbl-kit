@@ -27,6 +27,8 @@ func TestCanonicalJSON(t *testing.T) {
 		{name: "empty array", input: `[]`, want: `[]`},
 		{name: "malformed", input: `{`, wantErr: true},
 		{name: "trailing data", input: `{"a":1} x`, wantErr: true},
+		{name: "duplicate keys", input: `{"a":1,"a":2}`, wantErr: true},
+		{name: "nested duplicate keys", input: `{"b":{"c":1,"c":2}}`, wantErr: true},
 		{name: "empty body", input: ``, wantErr: true},
 	}
 	for _, tt := range tests {

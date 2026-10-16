@@ -1,14 +1,12 @@
 package webhooksig
 
 import (
-	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/sha512"
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"hash"
 	"strings"
@@ -68,6 +66,8 @@ type TokenEcho struct {
 }
 
 // Verify implements Strategy by comparing the body token with the secret.
+// The body must be exactly one JSON object; duplicate keys and trailing data
+// are malformed, matching the strict canonical decoder.
 func (s TokenEcho) Verify(secret []byte, req Request) error {
 	if len(secret) == 0 {
 		return fmt.Errorf("%w: empty secret", ErrMalformed)
@@ -76,11 +76,13 @@ func (s TokenEcho) Verify(secret []byte, req Request) error {
 	if field == "" {
 		field = "token"
 	}
-	decoder := json.NewDecoder(bytes.NewReader(req.Body))
-	decoder.UseNumber()
-	var body map[string]any
-	if err := decoder.Decode(&body); err != nil {
-		return fmt.Errorf("%w: body: %v", ErrMalformed, err)
+	decoded, err := decodeStrict(req.Body)
+	if err != nil {
+		return err
+	}
+	body, ok := decoded.(map[string]any)
+	if !ok {
+		return fmt.Errorf("%w: body is not a JSON object", ErrMalformed)
 	}
 	value, ok := body[field]
 	if !ok {
@@ -145,13 +147,13 @@ func decodeDigest(value string, encoding Encoding) ([]byte, error) {
 	case Hex:
 		decoded, err := hex.DecodeString(value)
 		if err != nil {
-			return nil, fmt.Errorf("%w: digest %q", ErrMalformed, value)
+			return nil, fmt.Errorf("%w: digest %q", ErrMalformed, truncate(value))
 		}
 		return decoded, nil
 	case Base64:
 		decoded, err := base64.StdEncoding.DecodeString(value)
 		if err != nil {
-			return nil, fmt.Errorf("%w: digest %q", ErrMalformed, value)
+			return nil, fmt.Errorf("%w: digest %q", ErrMalformed, truncate(value))
 		}
 		return decoded, nil
 	default:
