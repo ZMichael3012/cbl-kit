@@ -99,6 +99,8 @@ func TestAbortFromError(t *testing.T) {
 		{name: "precondition", err: grpcmw.E(grpcmw.KindFailedPrecondition, "bad_state", "нельзя отменить", nil), wantStatus: http.StatusConflict, wantCode: "bad_state"},
 		{name: "exhausted", err: grpcmw.E(grpcmw.KindResourceExhausted, "rate_limited", "лимит", nil), wantStatus: http.StatusTooManyRequests, wantCode: "rate_limited"},
 		{name: "unavailable", err: grpcmw.E(grpcmw.KindUnavailable, "gateway_down", "шлюз недоступен", nil), wantStatus: http.StatusServiceUnavailable, wantCode: "gateway_down"},
+		{name: "unauthenticated", err: grpcmw.E(grpcmw.KindUnauthenticated, "missing_token", "token is missing", nil), wantStatus: http.StatusUnauthorized, wantCode: "missing_token"},
+		{name: "permission denied", err: grpcmw.E(grpcmw.KindPermissionDenied, "no_rights", "role has no rights", nil), wantStatus: http.StatusForbidden, wantCode: "no_rights"},
 		{name: "internal", err: errors.New("secret detail"), wantStatus: http.StatusInternalServerError, wantCode: "internal_error"},
 	}
 

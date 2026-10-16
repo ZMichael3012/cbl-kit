@@ -30,6 +30,8 @@ func TestMapError(t *testing.T) {
 		{name: "failed precondition", err: grpcmw.E(grpcmw.KindFailedPrecondition, "bad_state", "недопустимое состояние", nil), want: codes.FailedPrecondition},
 		{name: "resource exhausted", err: grpcmw.E(grpcmw.KindResourceExhausted, "rate_limited", "лимит превышен", nil), want: codes.ResourceExhausted},
 		{name: "unavailable", err: grpcmw.E(grpcmw.KindUnavailable, "gateway_down", "шлюз недоступен", nil), want: codes.Unavailable},
+		{name: "unauthenticated", err: grpcmw.E(grpcmw.KindUnauthenticated, "missing_token", "token is missing", nil), want: codes.Unauthenticated},
+		{name: "permission denied", err: grpcmw.E(grpcmw.KindPermissionDenied, "no_rights", "role has no rights", nil), want: codes.PermissionDenied},
 		{name: "internal", err: grpcmw.E(grpcmw.KindInternal, "db_error", "секретная деталь", nil), want: codes.Internal},
 		{name: "wrapped", err: wrap(grpcmw.E(grpcmw.KindNotFound, "x", "нет", nil)), want: codes.NotFound},
 		{name: "unknown", err: errors.New("boom"), want: codes.Internal},

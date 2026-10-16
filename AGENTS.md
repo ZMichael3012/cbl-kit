@@ -51,7 +51,7 @@ go build ./...
 go vet ./...
 go test ./... -cover
 go test -tags integration ./outbox/... ./inbox/...   # requires Docker (testcontainers)
-docker run --rm -v "%CD%":/app -w /app golangci/golangci-lint:v1.64.8-alpine golangci-lint run ./...
+docker run --rm -v "%CD%":/app -w /app golangci/golangci-lint:latest-alpine golangci-lint run ./...
 powershell -File ../../scripts/check-no-emdash.ps1 -Root .
 ```
 
@@ -92,6 +92,7 @@ cbl-kit is a library: it has no local e2e stand and no PowerShell run scripts; i
 | CBL-1.1 - 1.6 | 2026-10-14 | done, W1 review closed (unit+integration: outbox 82.8%, inbox 85.0%, money 96.3%; DLQ for poison messages, storagex, Kafka delivery timeout) | `.specs/CBL-1.*.md` | awaiting commit |
 | CBL-1.3 (fix) | 2026-10-14 | done, findings of review 2.7: DLQ fallbacks for poison messages (an invalid event_id is sanitized into `x-original-event-id`; a missing event_type -> `unknown`; a corrupted retry envelope goes to DLQ instead of looping the partition) | `inbox/processor.go`, inbox tests | `cc5d796` |
 | CBL-16.15 | 2026-10-16 | done (English comments and documentation across the library: code, tests, specs, AGENTS.md, README, migrations; the library has no local e2e stand; no code changes) | `.specs/CBL-16.15-conventions.md` | this commit |
+| CBL-12.1 | 2026-10-16 | done (additive error kinds KindUnauthenticated/KindPermissionDenied: gRPC Unauthenticated/PermissionDenied, HTTP 401/403 in AbortFromError; unit tests; AGENTS lint snippet synced with the Makefile image) | `.specs/CBL-12.1-auth-error-kinds.md` | this commit |
 
 ## 9. Runbook
 

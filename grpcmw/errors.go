@@ -27,6 +27,10 @@ const (
 	KindResourceExhausted
 	// KindUnavailable describes dependency unavailability.
 	KindUnavailable
+	// KindUnauthenticated describes a missing or invalid caller identity.
+	KindUnauthenticated
+	// KindPermissionDenied describes an authenticated caller without rights.
+	KindPermissionDenied
 )
 
 // String returns the text name of the error class.
@@ -44,6 +48,10 @@ func (k Kind) String() string {
 		return "resource_exhausted"
 	case KindUnavailable:
 		return "unavailable"
+	case KindUnauthenticated:
+		return "unauthenticated"
+	case KindPermissionDenied:
+		return "permission_denied"
 	default:
 		return "internal"
 	}
@@ -139,6 +147,10 @@ func mapKind(k Kind) codes.Code {
 		return codes.ResourceExhausted
 	case KindUnavailable:
 		return codes.Unavailable
+	case KindUnauthenticated:
+		return codes.Unauthenticated
+	case KindPermissionDenied:
+		return codes.PermissionDenied
 	default:
 		return codes.Internal
 	}

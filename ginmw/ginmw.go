@@ -161,6 +161,10 @@ func httpStatusFor(kind grpcmw.Kind) (int, string, string) {
 		return http.StatusTooManyRequests, "resource_exhausted", "Too Many Requests"
 	case grpcmw.KindUnavailable:
 		return http.StatusServiceUnavailable, "unavailable", "Service Unavailable"
+	case grpcmw.KindUnauthenticated:
+		return http.StatusUnauthorized, "unauthenticated", "Unauthorized"
+	case grpcmw.KindPermissionDenied:
+		return http.StatusForbidden, "permission_denied", "Forbidden"
 	default:
 		return http.StatusInternalServerError, "internal_error", "Internal Server Error"
 	}
