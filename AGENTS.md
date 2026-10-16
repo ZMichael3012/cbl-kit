@@ -16,8 +16,10 @@ Out of scope: business logic of services, concrete topics and event schemas (in 
 
 | Package | Task | Consumers |
 | :-- | :-- | :-- |
-| `money` | CBL-1.1 | all services |
+| `money` | CBL-1.1, CBL-17.3 (float-free provider parsing) | all services |
 | `hmac` | CBL-1.6 | `cbl-webhook-ingress`, `cbl-notification` |
+| `webhooksig` | CBL-17.3 | `cbl-webhook-ingress`, `cbl-connector`, `cbl-mock-gateway` |
+| `ratelimit` | CBL-17.3 | `cbl-connector`, `cbl-webhook-ingress` |
 | `ginmw` | CBL-1.5 | HTTP services |
 | `grpcmw` | CBL-1.4 | gRPC services |
 | `outbox` (+ `kafkapub`) | CBL-1.2 | Payment, Ledger, Payout, Webhook Ingress, Reconciler |
@@ -29,6 +31,8 @@ Out of scope: business logic of services, concrete topics and event schemas (in 
 cbl-kit/
 ├── money/          # int64 minor units + decimals, no float
 ├── hmac/           # signature over the raw body, replay window
+├── webhooksig/     # provider webhook verification strategies (raw HMAC, canonical JSON HMAC, token echo)
+├── ratelimit/      # Redis token bucket with the local fallback and Retry-After helpers
 ├── ginmw/          # request_id, problem+json, access log, recovery
 ├── grpcmw/         # errors, recovery, metadata, request_id
 ├── outbox/         # Store, Envelope, Relay, kafkapub
@@ -38,7 +42,8 @@ cbl-kit/
 
 Dependencies: `gorm.io/gorm`, `gorm.io/driver/postgres`, `gin-gonic/gin`, `go.uber.org/zap`,
 `google.golang.org/grpc`, `google.golang.org/protobuf`, `google/uuid`, `twmb/franz-go`,
-`stretchr/testify`, `testcontainers-go` (integration tests only).
+`redis/go-redis/v9` (ratelimit, runtime), `stretchr/testify`, `alicebob/miniredis/v2`
+(ratelimit unit tests), `testcontainers-go` (integration tests only).
 
 Rules: `AutoMigrate` is forbidden; migrations in services run via goose, reference files are
 copied from this repository; panics in business code are forbidden; errors are wrapped with `%w`;
@@ -50,7 +55,7 @@ float is forbidden.
 go build ./...
 go vet ./...
 go test ./... -cover
-go test -tags integration ./outbox/... ./inbox/...   # requires Docker (testcontainers)
+go test -tags integration ./outbox/... ./inbox/... ./ratelimit/...   # requires Docker (testcontainers)
 docker run --rm -v "%CD%":/app -w /app golangci/golangci-lint:latest-alpine golangci-lint run ./...
 powershell -File ../../scripts/check-no-emdash.ps1 -Root .
 ```
@@ -76,6 +81,8 @@ cbl-kit is a library: it has no local e2e stand and no PowerShell run scripts; i
 | T-KK5 | Kafka publication inside the open relay transaction | simplicity, minimal lag | a network call holds row locks; the metric is inflated on rollback | a batch of at most 100, revisit to a two-phase scheme based on the results of 2.9 and 14.2 |
 | T-KK6 | `storagex.Migrate` extracted into kit | services do not duplicate goose wiring | kit gains a goose dependency | the dependency is only for the migration runtime, not used in business code |
 | T-KK7 | Main wiring (health, metrics stub, getenv) is duplicated in services | the service is autonomous and simple | duplication across 13+ repositories | extraction to cbl-kit/httpx after 0.7, when real metrics appear |
+| T-KK8 | The token bucket (local and Redis Lua) counts tokens in fixed-point micro-units, no floats anywhere | exact refill arithmetic, deterministic tests | integer math is denser; the Redis form uses microsecond granularity | `retryAfter` rounds up, so the wait is never understated; rates below 1 rps are expressed by large intervals |
+| T-KK9 | `ratelimit.WithFallback` switches to the per-process local bucket when Redis fails | the money path degrades instead of failing open | under an outage each replica allows up to its own Burst | the fallback config is conservative, `Metrics` reports every switch; provider 429 answers are honored via `Pause` |
 
 ## 7. Known issues
 
@@ -93,6 +100,7 @@ cbl-kit is a library: it has no local e2e stand and no PowerShell run scripts; i
 | CBL-1.3 (fix) | 2026-10-14 | done, findings of review 2.7: DLQ fallbacks for poison messages (an invalid event_id is sanitized into `x-original-event-id`; a missing event_type -> `unknown`; a corrupted retry envelope goes to DLQ instead of looping the partition) | `inbox/processor.go`, inbox tests | `cc5d796` |
 | CBL-16.15 | 2026-10-16 | done (English comments and documentation across the library: code, tests, specs, AGENTS.md, README, migrations; the library has no local e2e stand; no code changes) | `.specs/CBL-16.15-conventions.md` | this commit |
 | CBL-12.1 | 2026-10-16 | done (additive error kinds KindUnauthenticated/KindPermissionDenied: gRPC Unauthenticated/PermissionDenied, HTTP 401/403 in AbortFromError; unit tests; AGENTS lint snippet synced with the Makefile image) | `.specs/CBL-12.1-auth-error-kinds.md` | this commit |
+| CBL-17.3 | 2026-10-16 | done (provider primitives: money.ParseJSONNumber/ParseAny float-free parsing with exponent support; new `webhooksig` package - RawHMAC/CanonicalJSONHMAC/TokenEcho strategies, canonical JSON serializer, registry; new `ratelimit` package - fixed-point token bucket, Redis Lua shared limiter, local fallback with Metrics, Retry-After helpers; unit coverage money 97.8%, webhooksig 97.9%, ratelimit 92.6%; Redis integration test with testcontainers; golangci-lint 0 issues, govulncheck no reachable vulnerabilities; go-redis v9.23.0 pulls cpuid v2.4.0/go.uber.org/atomic v1.12.0/testify v1.12.1) | `.specs/CBL-17.3-kit-primitives.md` | this commit |
 
 ## 9. Runbook
 

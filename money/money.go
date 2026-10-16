@@ -22,6 +22,9 @@ var (
 	ErrInvalidDecimals = errors.New("money: invalid decimals")
 	// ErrInvalidAmount reports an invalid amount.
 	ErrInvalidAmount = errors.New("money: invalid amount")
+	// ErrFloatForbidden reports a float64 or float32 input; amounts must be
+	// decoded with json.Decoder.UseNumber or passed as strings.
+	ErrFloatForbidden = errors.New("money: float input is forbidden")
 	// ErrAssetMismatch reports an asset code mismatch in an operation.
 	ErrAssetMismatch = errors.New("money: asset mismatch")
 	// ErrDecimalsMismatch reports a decimals mismatch in an operation.
@@ -53,41 +56,7 @@ func New(minorUnits int64, asset string, decimals uint32) (Money, error) {
 
 // Parse parses a decimal string into Money; exponential notation is forbidden.
 func Parse(value, asset string, decimals uint32) (Money, error) {
-	if _, err := New(0, asset, decimals); err != nil {
-		return Money{}, err
-	}
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return Money{}, fmt.Errorf("%w: empty value", ErrInvalidAmount)
-	}
-	neg := false
-	switch value[0] {
-	case '+':
-		value = value[1:]
-	case '-':
-		neg = true
-		value = value[1:]
-	}
-	if value == "" {
-		return Money{}, fmt.Errorf("%w: value %q", ErrInvalidAmount, value)
-	}
-	intPart, fracPart, hasFrac := strings.Cut(value, ".")
-	if intPart == "" || !isDigits(intPart) {
-		return Money{}, fmt.Errorf("%w: value %q", ErrInvalidAmount, value)
-	}
-	if hasFrac && (fracPart == "" || !isDigits(fracPart)) {
-		return Money{}, fmt.Errorf("%w: value %q", ErrInvalidAmount, value)
-	}
-	if len(fracPart) > int(decimals) {
-		return Money{}, fmt.Errorf("%w: %q exceeds %d decimals", ErrInvalidAmount, value, decimals)
-	}
-	fracPart += strings.Repeat("0", int(decimals)-len(fracPart))
-	digits := intPart + fracPart
-	units, err := parseMinorUnits(digits, neg)
-	if err != nil {
-		return Money{}, fmt.Errorf("%w: value %q", ErrOverflow, value)
-	}
-	return New(units, asset, decimals)
+	return parseDecimal(value, asset, decimals, false)
 }
 
 // MustParse parses the value and panics on error; it is allowed only for constants and tests.
