@@ -1,33 +1,33 @@
 # CBL-1.5. HTTP middleware (Gin)
 
-| Поле | Значение |
+| Field | Value |
 | :-- | :-- |
-| Эпик | E1, общая библиотека |
-| Репозиторий | `cbl-kit`, пакет `ginmw` |
-| Размер | S |
-| Волна и параллельная группа | W0-KIT |
-| Зависит от | нет |
-| Контракты | формат ошибок RFC 9457 из `CBL-003`, раздел 1 |
-| Статус | done (локально, ожидает коммита) |
+| Epic | E1, shared library |
+| Repository | `cbl-kit`, package `ginmw` |
+| Size | S |
+| Wave and parallel group | W0-KIT |
+| Depends on | none |
+| Contracts | error format RFC 9457 from `CBL-003`, section 1 |
+| Status | done (locally, awaiting commit) |
 
-## 1. Контекст и цель
+## 1. Context and goal
 
-Единое поведение всех HTTP-сервисов на Gin (Billing API, Back-office, API Gateway,
-Webhook Ingress): request_id, логирование доступа, ошибки в формате
-`application/problem+json` (RFC 9457), защита от паник.
+Unified behavior of all HTTP services on Gin (Billing API, Back-office, API Gateway,
+Webhook Ingress): request_id, access logging, errors in the format
+`application/problem+json` (RFC 9457), panic protection.
 
-## 2. Границы
+## 2. Boundaries
 
-In scope: middleware и хелперы ошибок для Gin.
-Out of scope: аутентификация, rate limit, метрики Prometheus (задачи E7, 0.7).
+In scope: middleware and error helpers for Gin.
+Out of scope: authentication, rate limit, Prometheus metrics (tasks E7, 0.7).
 
-## 3. Функциональные требования
+## 3. Functional requirements
 
-FR-1. `RequestID() gin.HandlerFunc`: берет `X-Request-Id` или генерирует UUIDv7, кладет в
-контекст, возвращает в ответном заголовке.
+FR-1. `RequestID() gin.HandlerFunc`: takes `X-Request-Id` or generates a UUIDv7, puts it into
+the context, returns it in the response header.
 
-FR-2. `AccessLog(log *zap.Logger) gin.HandlerFunc`: логирует метод, путь, статус, длительность,
-request_id; ошибки уровня 5xx - error, 4xx - warn.
+FR-2. `AccessLog(log *zap.Logger) gin.HandlerFunc`: logs the method, path, status, duration,
+request_id; errors of level 5xx - error, 4xx - warn.
 
 FR-3. Problem JSON:
 
@@ -36,51 +36,51 @@ type Problem struct {
   Type, Title string; Status int; Code string; Detail string; RequestID string
 }
 func AbortWithProblem(c *gin.Context, status int, code, title, detail string)
-func AbortFromError(c *gin.Context, err error) // маппинг grpcmw.Kind -> HTTP-статус
+func AbortFromError(c *gin.Context, err error) // mapping grpcmw.Kind -> HTTP status
 ```
 
-FR-4. `Recovery(log *zap.Logger) gin.HandlerFunc`: panic -> 500 problem+json, стек в лог,
-ответ без внутренних деталей.
+FR-4. `Recovery(log *zap.Logger) gin.HandlerFunc`: panic -> 500 problem+json, stack to the log,
+response without internal details.
 
-FR-5. Маппинг видов ошибок: NotFound -> 404, InvalidArgument -> 422, AlreadyExists -> 409,
+FR-5. Error kind mapping: NotFound -> 404, InvalidArgument -> 422, AlreadyExists -> 409,
 FailedPrecondition -> 409, ResourceExhausted -> 429, Unavailable -> 503, Internal -> 500.
 
-## 4. Контракты
+## 4. Contracts
 
-Тело ошибки и `request_id` - `CBL-003`, раздел 1. Код `code` - машиночитаемая строка
-(например, `idempotency_key_reuse`).
+The error body and `request_id` - `CBL-003`, section 1. The `code` value is a machine-readable
+string (for example, `idempotency_key_reuse`).
 
-## 5. Модель данных и миграции
+## 5. Data model and migrations
 
-Не применимо.
+Not applicable.
 
-## 6. Конечные автоматы
+## 6. State machines
 
-Не применимо.
+Not applicable.
 
 ## 7. Edge cases
 
-Паника в хендлере, запись после `WriteHeader` (проверять `c.Writer.Written()`), пустой
-`X-Request-Id`, длинные заголовки, вложенные ошибки.
+Panic in the handler, a write after `WriteHeader` (check `c.Writer.Written()`), empty
+`X-Request-Id`, long headers, nested errors.
 
-## 8. Нефункциональные требования
+## 8. Non-functional requirements
 
-Оверхед не более 30 мкс на запрос; логирование структурированное.
+Overhead not more than 30 microseconds per request; structured logging.
 
-## 9. План тестов
+## 9. Test plan
 
-| Уровень | Сценарии |
+| Level | Scenarios |
 | :-- | :-- |
 | Smoke | `go build ./...` |
-| Unit | httptest: request_id генерация и проброс, problem+json тело и заголовок, recovery, маппинг всех Kind, AccessLog |
-| Integration | не применимо |
-| E2E | не применимо |
-| Load | не применимо |
+| Unit | httptest: request_id generation and propagation, problem+json body and header, recovery, mapping of all Kind, AccessLog |
+| Integration | not applicable |
+| E2E | not applicable |
+| Load | not applicable |
 
-## 10. План работ и коммит
+## 10. Work plan and commit
 
-Коммит `CBL-1.5: Gin middleware problem+json и request_id`; в текущей сессии без коммитов.
+Commit `CBL-1.5: Gin middleware problem+json and request_id`; no commits in the current session.
 
-## 11. Открытые вопросы
+## 11. Open questions
 
-- Нет.
+- None.

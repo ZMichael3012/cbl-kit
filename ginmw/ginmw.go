@@ -1,5 +1,5 @@
-// Пакет ginmw предоставляет middleware Gin для HTTP-сервисов платформы CBL:
-// идентификатор запроса, журнал доступа, recovery и ошибки в формате problem+json.
+// Package ginmw provides Gin middleware for CBL platform HTTP services:
+// request ID, access log, recovery, and errors in the problem+json format.
 package ginmw
 
 import (
@@ -16,32 +16,32 @@ import (
 	"github.com/cbl/cbl-kit/grpcmw"
 )
 
-// Имена заголовков и типов содержимого, используемых платформой.
+// Names of headers and content types used by the platform.
 const (
-	// HeaderRequestID задает имя заголовка идентификатора запроса.
+	// HeaderRequestID sets the request identifier header name.
 	HeaderRequestID = "X-Request-Id"
-	// ContentTypeProblem задает тип содержимого ошибок RFC 9457.
+	// ContentTypeProblem sets the content type of RFC 9457 errors.
 	ContentTypeProblem = "application/problem+json"
 	requestIDKey       = "request_id"
 )
 
-// Problem описывает тело ошибки в формате application/problem+json (RFC 9457).
+// Problem describes an error body in the application/problem+json format (RFC 9457).
 type Problem struct {
-	// Type задает URI типа проблемы.
+	// Type sets the problem type URI.
 	Type string `json:"type"`
-	// Title задает краткое описание проблемы.
+	// Title sets a short problem description.
 	Title string `json:"title"`
-	// Status задает HTTP-статус.
+	// Status sets the HTTP status.
 	Status int `json:"status"`
-	// Code задает машиночитаемый код, например idempotency_key_reuse.
+	// Code sets a machine-readable code, for example idempotency_key_reuse.
 	Code string `json:"code,omitempty"`
-	// Detail задает детали для не-внутренних ошибок.
+	// Detail sets details for non-internal errors.
 	Detail string `json:"detail,omitempty"`
-	// RequestID задает идентификатор запроса.
+	// RequestID sets the request identifier.
 	RequestID string `json:"request_id,omitempty"`
 }
 
-// RequestID возвращает middleware, обеспечивающий наличие идентификатора запроса.
+// RequestID returns middleware that ensures a request identifier is present.
 func RequestID() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := strings.TrimSpace(c.GetHeader(HeaderRequestID))
@@ -56,7 +56,7 @@ func RequestID() gin.HandlerFunc {
 	}
 }
 
-// RequestIDFrom возвращает идентификатор запроса из контекста Gin.
+// RequestIDFrom returns the request identifier from the Gin context.
 func RequestIDFrom(c *gin.Context) string {
 	if v, ok := c.Get(requestIDKey); ok {
 		if s, ok := v.(string); ok {
@@ -66,7 +66,7 @@ func RequestIDFrom(c *gin.Context) string {
 	return ""
 }
 
-// AccessLog логирует метод, путь, статус и длительность запроса.
+// AccessLog logs the request method, path, status, and duration.
 func AccessLog(log *zap.Logger) gin.HandlerFunc {
 	if log == nil {
 		log = zap.NewNop()
@@ -93,7 +93,7 @@ func AccessLog(log *zap.Logger) gin.HandlerFunc {
 	}
 }
 
-// Recovery перехватывает паники и отдает 500 в формате problem+json.
+// Recovery catches panics and responds with 500 in the problem+json format.
 func Recovery(log *zap.Logger) gin.HandlerFunc {
 	if log == nil {
 		log = zap.NewNop()
@@ -117,7 +117,7 @@ func Recovery(log *zap.Logger) gin.HandlerFunc {
 	}
 }
 
-// AbortWithProblem прерывает обработку и отдает ошибку в формате problem+json.
+// AbortWithProblem aborts processing and responds with an error in the problem+json format.
 func AbortWithProblem(c *gin.Context, status int, code, title, detail string) {
 	problem := Problem{
 		Type:      "about:blank",
@@ -131,8 +131,8 @@ func AbortWithProblem(c *gin.Context, status int, code, title, detail string) {
 	c.AbortWithStatusJSON(status, problem)
 }
 
-// AbortFromError маппит доменную ошибку в HTTP-статус и problem+json.
-// Детали внутренних ошибок наружу не отдаются.
+// AbortFromError maps a domain error to an HTTP status and problem+json.
+// Details of internal errors are not exposed to the caller.
 func AbortFromError(c *gin.Context, err error) {
 	kind := grpcmw.KindOf(err)
 	status, code, title := httpStatusFor(kind)
@@ -146,7 +146,7 @@ func AbortFromError(c *gin.Context, err error) {
 	AbortWithProblem(c, status, code, title, detail)
 }
 
-// httpStatusFor переводит класс ошибки в HTTP-статус, код и заголовок.
+// httpStatusFor converts an error kind into an HTTP status, code, and title.
 func httpStatusFor(kind grpcmw.Kind) (int, string, string) {
 	switch kind {
 	case grpcmw.KindNotFound:
@@ -166,7 +166,7 @@ func httpStatusFor(kind grpcmw.Kind) (int, string, string) {
 	}
 }
 
-// errorMessage извлекает сообщение доменной ошибки.
+// errorMessage extracts the domain error message.
 func errorMessage(err error) string {
 	var target *grpcmw.Error
 	if errors.As(err, &target) {

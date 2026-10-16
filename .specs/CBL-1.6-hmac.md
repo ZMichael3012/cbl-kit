@@ -1,28 +1,30 @@
-# CBL-1.6. HMAC-подпись и защита от replay
+# CBL-1.6. HMAC signature and replay protection
 
-| Поле | Значение |
+| Field | Value |
 | :-- | :-- |
-| Эпик | E1, общая библиотека |
-| Репозиторий | `cbl-kit`, пакет `hmac` |
-| Размер | S |
-| Волна и параллельная группа | W0-KIT |
-| Зависит от | нет |
-| Контракты | формат подписи из `CBL-003`, раздел 4 |
-| Статус | done (локально, ожидает коммита) |
+| Epic | E1, shared library |
+| Repository | `cbl-kit`, package `hmac` |
+| Size | S |
+| Wave and parallel group | W0-KIT |
+| Depends on | none |
+| Contracts | signature format from `CBL-003`, section 4 |
+| Status | done (locally, awaiting commit) |
 
-## 1. Контекст и цель
+## 1. Context and goal
 
-Подпись вебхуков в обе стороны: входящие от шлюза (Webhook Ingress) и исходящие мерчантам
-(Notification). Подпись считается по сырому телу, окно replay ограничено.
+Signing of webhooks in both directions: incoming from the gateway (Webhook Ingress) and outgoing
+to merchants (Notification). The signature is computed over the raw body, the replay window is
+limited.
 
-## 2. Границы
+## 2. Boundaries
 
-In scope: вычисление и проверка подписи, разбор заголовка, окно replay, ротация секретов.
-Out of scope: регистрация webhook-endpoints и хранение секретов (задача 8.1), защита URL (SSRF, 8.2).
+In scope: signature computation and verification, header parsing, replay window, secret rotation.
+Out of scope: registration of webhook endpoints and secret storage (task 8.1), URL protection
+(SSRF, 8.2).
 
-## 3. Функциональные требования
+## 3. Functional requirements
 
-FR-1. Формат заголовка: `t=<unix>,v1=<hex>[,v1=<hex>]` (несколько v1 для ротации).
+FR-1. Header format: `t=<unix>,v1=<hex>[,v1=<hex>]` (multiple v1 for rotation).
 
 FR-2. API:
 
@@ -35,50 +37,50 @@ func VerifyAny(secrets [][]byte, header string, body []byte, now time.Time, wind
 func ParseHeader(header string) (timestamp time.Time, signatures [][]byte, err error)
 ```
 
-FR-3. Подпись считается по `strconv.FormatInt(t, 10) + "." + body`; тело не должно
-перекодироваться. Проверка: совпадение хотя бы одной подписи из `v1` (constant-time сравнение
-`hmac.Equal`), возраст `|now - t| <= window`, иначе ошибка.
+FR-3. The signature is computed over `strconv.FormatInt(t, 10) + "." + body`; the body must not
+be re-encoded. Verification: a match of at least one signature from `v1` (constant-time
+comparison `hmac.Equal`), age `|now - t| <= window`, otherwise an error.
 
-FR-4. Ошибки: `ErrMalformed`, `ErrSignatureMismatch`, `ErrExpired` (sentinel); оборачиваются
-через `fmt.Errorf` с `%w`.
+FR-4. Errors: `ErrMalformed`, `ErrSignatureMismatch`, `ErrExpired` (sentinel); wrapped
+via `fmt.Errorf` with `%w`.
 
-## 4. Контракты
+## 4. Contracts
 
-Совместим с `X-Billing-Signature` из `CBL-003`, раздел 4, и проверкой вебхуков провайдера
-(провайдерские заголовки маппятся сервисом в этот формат).
+Compatible with `X-Billing-Signature` from `CBL-003`, section 4, and with provider webhook
+verification (provider headers are mapped by the service into this format).
 
-## 5. Модель данных и миграции
+## 5. Data model and migrations
 
-Не применимо.
+Not applicable.
 
-## 6. Конечные автоматы
+## 6. State machines
 
-Не применимо.
+Not applicable.
 
 ## 7. Edge cases
 
-Пустое тело, отсутствие `t` или `v1`, несколько подписей, timestamp в будущем, ровно на границе
-окна, не-hex подпись, пустой секрет (ошибка конфигурации), очень длинное тело (без лимита длины,
-лимит на уровне HTTP-сервера).
+Empty body, missing `t` or `v1`, multiple signatures, timestamp in the future, exactly at the
+window boundary, non-hex signature, empty secret (configuration error), very long body (no
+length limit, the limit is at the HTTP server level).
 
-## 8. Нефункциональные требования
+## 8. Non-functional requirements
 
-Constant-time сравнение; вычисление HMAC-SHA256 на телах до 1 МБ не более 5 мс.
+Constant-time comparison; HMAC-SHA256 computation on bodies up to 1 MB not more than 5 ms.
 
-## 9. План тестов
+## 9. Test plan
 
-| Уровень | Сценарии |
+| Level | Scenarios |
 | :-- | :-- |
 | Smoke | `go build ./...` |
-| Unit | Sign/Verify round-trip, изменение тела, просроченный/будущий ts, ротация (2 подписи), malformed, граница окна |
-| Integration | не применимо |
-| E2E | не применимо |
-| Load | не применимо |
+| Unit | Sign/Verify round-trip, body change, expired/future ts, rotation (2 signatures), malformed, window boundary |
+| Integration | not applicable |
+| E2E | not applicable |
+| Load | not applicable |
 
-## 10. План работ и коммит
+## 10. Work plan and commit
 
-Коммит `CBL-1.6: HMAC-подпись с защитой от replay`; в текущей сессии без коммитов.
+Commit `CBL-1.6: HMAC signature with replay protection`; no commits in the current session.
 
-## 11. Открытые вопросы
+## 11. Open questions
 
-- Нет.
+- None.

@@ -8,14 +8,14 @@ import (
 	"gorm.io/gorm"
 )
 
-// Store записывает события в outbox в транзакции бизнес-изменения.
+// Store writes events to the outbox within the business-change transaction.
 type Store struct{}
 
-// NewStore создает Store.
+// NewStore creates a Store.
 func NewStore() *Store { return &Store{} }
 
-// Append добавляет событие в outbox в переданной транзакции.
-// nil-транзакция запрещена: событие обязано быть записано атомарно с бизнес-данными.
+// Append adds an event to the outbox in the given transaction.
+// A nil transaction is forbidden: the event must be written atomically with the business data.
 func (s *Store) Append(ctx context.Context, tx *gorm.DB, env Envelope) error {
 	if tx == nil {
 		return errors.New("outbox: nil transaction")

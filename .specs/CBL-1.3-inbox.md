@@ -1,50 +1,51 @@
-# CBL-1.3. Пакет inbox и идемпотентный consumer
+# CBL-1.3. inbox package and idempotent consumer
 
-| Поле | Значение |
+| Field | Value |
 | :-- | :-- |
-| Эпик | E1, общая библиотека |
-| Репозиторий | `cbl-kit`, пакет `inbox` |
-| Размер | L |
-| Волна и параллельная группа | W0-KIT |
-| Зависит от | 1.2, 1.7 (CF-1) |
-| Контракты | inbox DDL и правила retry/DLQ из `CBL-003`, раздел 6 |
-| Статус | done (локально, ожидает коммита) |
+| Epic | E1, shared library |
+| Repository | `cbl-kit`, package `inbox` |
+| Size | L |
+| Wave and parallel group | W0-KIT |
+| Depends on | 1.2, 1.7 (CF-1) |
+| Contracts | inbox DDL and the retry/DLQ rules from `CBL-003`, section 6 |
+| Status | done (locally, awaiting commit) |
 
-## 1. Контекст и цель
+## 1. Context and goal
 
-Kafka дает at-least-once: каждый консьюмер обязан быть идемпотентным. Inbox-таблица
-`(consumer, event_id)` в одной транзакции с эффектом обработки отсекает дубликаты; ошибки
-уходят в retry-топики и DLQ (`CBL-003`, раздел 6).
+Kafka provides at-least-once: every consumer must be idempotent. The inbox table
+`(consumer, event_id)` in the same transaction as the processing effect cuts off duplicates;
+errors go to retry topics and the DLQ (`CBL-003`, section 6).
 
-## 2. Границы
+## 2. Boundaries
 
-In scope: Guard идемпотентности, Processor обработки сообщений, маршрутизация retry/DLQ.
-Out of scope: конфигурация franz-go consumer-групп в сервисах, мониторинг лага (0.7).
+In scope: the idempotency Guard, the message-processing Processor, retry/DLQ routing.
+Out of scope: configuration of franz-go consumer groups in services, lag monitoring (0.7).
 
-## 3. Функциональные требования
+## 3. Functional requirements
 
-FR-1. Модель GORM `Record` (таблица `inbox`): `consumer`, `event_id`, `processed_at`,
-составной первичный ключ `(consumer, event_id)`. Reference-миграция `migrations/inbox.sql`.
+FR-1. GORM model `Record` (table `inbox`): `consumer`, `event_id`, `processed_at`, a composite
+primary key `(consumer, event_id)`. Reference migration `migrations/inbox.sql`.
 
 FR-2. Guard:
 
 ```go
 type Guard struct{}
 func NewGuard() *Guard
-// Process выполняет fn в одной транзакции с вставкой inbox-записи.
-// Возвращает processed=false без вызова fn, если событие уже обработано.
+// Process executes fn in the same transaction as the inbox record insert.
+// Returns processed=false without calling fn if the event has already been processed.
 func (g *Guard) Process(ctx context.Context, db *gorm.DB, consumer, eventID string, fn func(tx *gorm.DB) error) (processed bool, err error)
 ```
 
-FR-3. Вставка inbox выполняется `INSERT ... ON CONFLICT DO NOTHING`; `RowsAffected == 0`
-означает дубликат; ошибка `fn` откатывает всю транзакцию, включая inbox-запись.
+FR-3. The inbox insert is performed with `INSERT ... ON CONFLICT DO NOTHING`;
+`RowsAffected == 0` means a duplicate; an `fn` error rolls back the entire transaction,
+including the inbox record.
 
 FR-4. Processor:
 
 ```go
 type Message struct{ Topic, Key string; Headers map[string]string; Value []byte }
 type Handler interface{ Handle(ctx context.Context, db *gorm.DB, msg Message) error }
-type Router struct{} // маршрутизация retry/DLQ
+type Router struct{} // retry/DLQ routing
 func NewRouter(mainTopic string, maxAttempts int) *Router
 func (r *Router) Next(topic string, attempt int, err error) (string, bool) // topic, isDLQ
 type Processor struct{}
@@ -52,53 +53,55 @@ func NewProcessor(db *gorm.DB, guard *Guard, handler Handler, pub outbox.Publish
 func (p *Processor) Process(ctx context.Context, msg Message) error
 ```
 
-FR-5. Правила повторных попыток: счетчик `x-retry-attempt` в заголовках; при ошибке обработки
-сообщение публикуется в `<topic>.retry.5s` -> `.retry.1m` -> `.retry.10m` -> `<topic>.dlq`
-(причина в заголовке `x-error`); `event_id` сохраняется, чтобы inbox-логика работала при
-повторе. При исчерпании попыток - DLQ и подтверждение исходного сообщения.
+FR-5. Retry rules: the `x-retry-attempt` counter in the headers; on a processing error the
+message is published to `<topic>.retry.5s` -> `.retry.1m` -> `.retry.10m` -> `<topic>.dlq`
+(the reason is in the `x-error` header); `event_id` is preserved so that the inbox logic works
+on a retry. When attempts are exhausted - the DLQ and acknowledgment of the original message.
 
-FR-6. Тонкий адаптер `kafkaconsumer` (franz-go): `Run(ctx, topics, groupID, batchSize)` читает
-сообщения и передает их в `Processor`; коммит офсета после успешной обработки или DLQ.
+FR-6. The thin `kafkaconsumer` adapter (franz-go): `Run(ctx, topics, groupID, batchSize)`
+reads messages and passes them to the `Processor`; the offset is committed after successful
+processing or the DLQ.
 
-## 4. Контракты
+## 4. Contracts
 
-DDL и правила из `CBL-003` (раздел 6). Заголовки: `event_id`, `event_type`, `traceparent`,
+DDL and rules from `CBL-003` (section 6). Headers: `event_id`, `event_type`, `traceparent`,
 `x-retry-attempt`, `x-error`.
 
-## 5. Модель данных и миграции
+## 5. Data model and migrations
 
-`migrations/inbox.sql` из `CBL-003`.
+`migrations/inbox.sql` from `CBL-003`.
 
-## 6. Конечные автоматы
+## 6. State machines
 
-Маршрутизация попыток: `main -> retry.5s -> retry.1m -> retry.10m -> dlq`.
+Attempt routing: `main -> retry.5s -> retry.1m -> retry.10m -> dlq`.
 
 ## 7. Edge cases
 
-Дубликат до и после обработки, ошибка обработчика после побочного эффекта (эффект и inbox в
-одной транзакции), потеря `event_id`, сообщения не по порядку, пустые заголовки, конкурентная
-обработка одного event_id разными инстансами (уникальный ключ).
+A duplicate before and after processing, a handler error after a side effect (the effect and
+the inbox are in the same transaction), a lost `event_id`, out-of-order messages, empty
+headers, concurrent processing of the same event_id by different instances (unique key).
 
-## 8. Нефункциональные требования
+## 8. Non-functional requirements
 
-Дубликат не вызывает повторного эффекта. Обработка одного сообщения - в одной транзакции БД.
-Unit-тесты без Docker; integration (testcontainers) под тегом `integration`.
+A duplicate does not cause a repeated effect. Processing of a single message happens in a
+single DB transaction. Unit tests without Docker; integration (testcontainers) under the
+`integration` tag.
 
-## 9. План тестов
+## 9. Test plan
 
-| Уровень | Сценарии |
+| Level | Scenarios |
 | :-- | :-- |
 | Smoke | `go build ./...` |
-| Unit | Guard (вставка, дубликат, откат), Router (все переходы, DLQ), Processor (успех, ошибка, дубликат) |
-| Integration | реальный PostgreSQL: конкурентные Process одного event_id; эффект + inbox атомарны |
-| E2E | не применимо |
-| Load | не применимо |
+| Unit | Guard (insert, duplicate, rollback), Router (all transitions, DLQ), Processor (success, error, duplicate) |
+| Integration | real PostgreSQL: concurrent Process calls for the same event_id; the effect + inbox are atomic |
+| E2E | not applicable |
+| Load | not applicable |
 
-## 10. План работ и коммит
+## 10. Work plan and commit
 
-Коммит `CBL-1.3: inbox и идемпотентный consumer с retry/DLQ`; в текущей сессии без коммитов.
+Commit `CBL-1.3: inbox and idempotent consumer with retry/DLQ`; no commits in the current session.
 
-## 11. Открытые вопросы
+## 11. Open questions
 
-- Задержка retry реализуется через отдельные топики; точный таймер ожидания настраивается
-  консьюмером сервиса, пакет задает только маршрут.
+- The retry delay is implemented through separate topics; the exact wait timer is configured
+  by the service consumer, the package defines only the route.

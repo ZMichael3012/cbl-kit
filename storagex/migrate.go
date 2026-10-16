@@ -1,5 +1,5 @@
-// Пакет storagex содержит общие утилиты работы с PostgreSQL для сервисов CBL:
-// применение goose-миграций, чтобы сервисы не дублировали обвязку.
+// Package storagex contains shared PostgreSQL utilities for CBL services:
+// applying goose migrations so that services do not duplicate the plumbing.
 package storagex
 
 import (
@@ -12,8 +12,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// Migrate применяет goose-миграции из каталога dir.
-// Миграции только вперед; изменение примененных файлов запрещено процессом CBL-001.
+// Migrate applies goose migrations from the dir directory.
+// Migrations are forward only; modifying applied files is forbidden by the CBL-001 process.
 func Migrate(ctx context.Context, db *gorm.DB, dir string) error {
 	if _, err := os.Stat(dir); err != nil {
 		return fmt.Errorf("storagex: migrations dir %q: %w", dir, err)

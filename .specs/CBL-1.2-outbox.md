@@ -1,34 +1,34 @@
-# CBL-1.2. Пакет outbox
+# CBL-1.2. outbox package
 
-| Поле | Значение |
+| Field | Value |
 | :-- | :-- |
-| Эпик | E1, общая библиотека |
-| Репозиторий | `cbl-kit`, пакет `outbox` (+ адаптер `kafkapub`) |
-| Размер | L |
-| Волна и параллельная группа | W0-KIT |
-| Зависит от | 1.7 (CF-1, для Kafka-конверта), 1.1 |
-| Контракты | outbox DDL из `CBL-003`, раздел 6; заголовки события из `envelope.proto` |
-| Статус | done (локально, ожидает коммита) |
+| Epic | E1, shared library |
+| Repository | `cbl-kit`, package `outbox` (+ `kafkapub` adapter) |
+| Size | L |
+| Wave and parallel group | W0-KIT |
+| Depends on | 1.7 (CF-1, for the Kafka envelope), 1.1 |
+| Contracts | outbox DDL from `CBL-003`, section 6; event headers from `envelope.proto` |
+| Status | done (locally, awaiting commit) |
 
-## 1. Контекст и цель
+## 1. Context and goal
 
-Outbox гарантирует атомарность бизнес-транзакции и события (`CBL-000`, обоснование в разделе 10):
-запись события идет в ту же транзакцию, что и бизнес-данные, а relay публикует в Kafka
-at-least-once. Пакет используется всеми сервисами-продюсерами (Payment, Ledger, Payout,
-Webhook Ingress, Reconciler).
+Outbox guarantees atomicity of the business transaction and the event (`CBL-000`, rationale
+in section 10): the event record goes in the same transaction as the business data, and the
+relay publishes to Kafka at-least-once. The package is used by all producer services (Payment,
+Ledger, Payout, Webhook Ingress, Reconciler).
 
-## 2. Границы
+## 2. Boundaries
 
-In scope: модель и запись события в транзакции, relay с `FOR UPDATE SKIP LOCKED`, метрики
-интерфейсом, franz-go-адаптер публикации, reference-миграция SQL.
-Out of scope: потребление событий (1.3), конкретные топики сервисов, Debezium CDC.
+In scope: the model and transactional recording of an event, relay with `FOR UPDATE SKIP
+LOCKED`, metrics via an interface, the franz-go publish adapter, the reference SQL migration.
+Out of scope: event consumption (1.3), service-specific topics, Debezium CDC.
 
-## 3. Функциональные требования
+## 3. Functional requirements
 
-FR-1. Модель GORM `Record` (таблица `outbox`): `id int64`, `event_id uuid уникальный`,
-`topic`, `key`, `headers jsonb`, `payload bytea`, `created_at`, `published_at` nullable.
-Автосоздание таблицы запрещено: пакет поставляет файл `migrations/outbox.sql` (goose) для
-копирования в сервис.
+FR-1. GORM model `Record` (table `outbox`): `id int64`, `event_id uuid unique`, `topic`,
+`key`, `headers jsonb`, `payload bytea`, `created_at`, nullable `published_at`. Automatic
+table creation is forbidden: the package ships the file `migrations/outbox.sql` (goose) for
+copying into a service.
 
 FR-2. API:
 
@@ -46,62 +46,64 @@ type Metrics interface{ AddPublished(n int, topic string); SetPending(n int, top
 
 type Relay struct{}
 func NewRelay(db *gorm.DB, pub Publisher, log *zap.Logger, opts ...Option) *Relay
-func (r *Relay) Run(ctx context.Context) error       // цикл с интервалом
-func (r *Relay) PublishBatch(ctx context.Context) (int, error) // тестируемая единица
+func (r *Relay) Run(ctx context.Context) error       // loop with an interval
+func (r *Relay) PublishBatch(ctx context.Context) (int, error) // testable unit
 ```
 
-FR-3. `PublishBatch`: в транзакции выбрать пачку неопубликованных (`ORDER BY id LIMIT n
-FOR UPDATE SKIP LOCKED`), опубликовать, проставить `published_at`; ошибка публикации -
-rollback, событие останется для следующего цикла; пачки обрабатываются до опустошения.
+FR-3. `PublishBatch`: within a transaction, select a batch of unpublished records (`ORDER BY
+id LIMIT n FOR UPDATE SKIP LOCKED`), publish them, set `published_at`; a publish error -
+rollback, the event remains for the next loop; batches are processed until the table is
+drained.
 
-FR-4. Адаптер `kafkapub`: `Publisher` поверх `franz-go` (`kgo.Client.ProduceSync`), продюсер
-идемпотентный (`kgo.RequiredAcks(kgo.AllISRAcks())`, `kgo.ProducerBatchMaxBytes`, retries);
-заголовки события переносятся в Kafka headers; ключ партиции - `Envelope.Key`.
+FR-4. `kafkapub` adapter: a `Publisher` on top of `franz-go` (`kgo.Client.ProduceSync`), an
+idempotent producer (`kgo.RequiredAcks(kgo.AllISRAcks())`, `kgo.ProducerBatchMaxBytes`,
+retries); event headers are carried over to Kafka headers; the partition key is
+`Envelope.Key`.
 
-FR-5. Метрики: интерфейс `Metrics` (лаг outbox, количество опубликованных), реализация noop по
-умолчанию; Prometheus-адаптер подключается в 0.7.
+FR-5. Metrics: the `Metrics` interface (outbox lag, number published), a noop implementation
+by default; the Prometheus adapter is connected in 0.7.
 
-## 4. Контракты
+## 4. Contracts
 
-DDL строго из `CBL-003` (раздел 6). Заголовки: `event_id`, `event_type`, `occurred_at`,
-`producer`, `traceparent`, `schema_version` (`envelope.proto`). Ошибки вводятся sentinel-ошибками,
-панки запрещены.
+DDL strictly from `CBL-003` (section 6). Headers: `event_id`, `event_type`, `occurred_at`,
+`producer`, `traceparent`, `schema_version` (`envelope.proto`). Errors are introduced as
+sentinel errors, panics are forbidden.
 
-## 5. Модель данных и миграции
+## 5. Data model and migrations
 
-`migrations/outbox.sql`: `CREATE TABLE outbox (...)` из `CBL-003` плюс индекс
-`published_at` partial (`WHERE published_at IS NULL`) для эффективного polling.
+`migrations/outbox.sql`: `CREATE TABLE outbox (...)` from `CBL-003` plus a partial
+`published_at` index (`WHERE published_at IS NULL`) for efficient polling.
 
-## 6. Конечные автоматы
+## 6. State machines
 
-Не применимо.
+Not applicable.
 
 ## 7. Edge cases
 
-Конкурентные relay-инстансы (`SKIP LOCKED`), падение после публикации до `published_at`
-(at-least-once, дубль допустим, потребитель идемпотентен), пустая пачка, ошибки Kafka,
-невалидный envelope, очень большой payload.
+Concurrent relay instances (`SKIP LOCKED`), a crash after publishing and before
+`published_at` (at-least-once, a duplicate is acceptable, the consumer is idempotent), an
+empty batch, Kafka errors, an invalid envelope, a very large payload.
 
-## 8. Нефункциональные требования
+## 8. Non-functional requirements
 
-Лаг публикации при нормальной работе не более 1 секунды (интервал по умолчанию 250 мс,
-батч 100). Relay не блокирует бизнес-транзакции. Unit-тесты без Docker; integration-тесты
-(testcontainers PostgreSQL и Kafka) под тегом `integration`.
+The publish lag under normal operation is at most 1 second (default interval 250 ms, batch
+100). The relay does not block business transactions. Unit tests without Docker; integration
+tests (testcontainers PostgreSQL and Kafka) under the `integration` tag.
 
-## 9. План тестов
+## 9. Test plan
 
-| Уровень | Сценарии |
+| Level | Scenarios |
 | :-- | :-- |
 | Smoke | `go build ./...` |
-| Unit | валидация envelope, заголовки, нарезка тем, настройка опций |
-| Integration | запись в транзакции + откат транзакции не оставляет outbox; параллельные relay; повторная публикация после сбоя |
-| E2E | не применимо (проверяется в сервисах) |
-| Load | не применимо |
+| Unit | envelope validation, headers, topic breakdown, option configuration |
+| Integration | a write in a transaction and a transaction rollback leave no outbox record; concurrent relays; re-publishing after a failure |
+| E2E | not applicable (verified in services) |
+| Load | not applicable |
 
-## 10. План работ и коммит
+## 10. Work plan and commit
 
-Коммит `CBL-1.2: outbox с relay на SKIP LOCKED`; в текущей сессии без коммитов.
+Commit `CBL-1.2: outbox with a relay based on SKIP LOCKED`; no commits in the current session.
 
-## 11. Открытые вопросы
+## 11. Open questions
 
-- CDC-вариант (Debezium) зафиксирован как альтернатива, не реализуется.
+- The CDC option (Debezium) is recorded as an alternative and is not implemented.

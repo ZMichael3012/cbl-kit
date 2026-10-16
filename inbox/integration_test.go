@@ -209,8 +209,8 @@ func TestIntegrationInvalidEventIDToDLQ(t *testing.T) {
 	pub := &recordingPublisher{}
 	processor := inbox.NewProcessor("payment", db, inbox.NewGuard(), &flakyHandler{}, pub, inbox.NewRouter("payment.events", 3), zap.NewNop())
 
-	// event_id не UUID: конверт повтора не собрать, сообщение обязано уйти в DLQ
-	// с санитизированным event_id, а не зациклить партицию.
+	// event_id is not a UUID: the retry envelope cannot be built, so the message
+	// must go to the DLQ with a sanitized event_id instead of looping the partition.
 	msg := inbox.Message{
 		Topic: "payment.events",
 		Key:   "pay-1",
@@ -226,7 +226,7 @@ func TestIntegrationInvalidEventIDToDLQ(t *testing.T) {
 	require.Len(t, events, 1)
 	assert.Equal(t, "payment.events.dlq", events[0].Topic)
 	assert.Equal(t, "pay-1", events[0].Headers[inbox.HeaderOriginalEventID])
-	assert.NotEqual(t, "pay-1", events[0].EventID, "DLQ-конверт получает валидный event_id")
+	assert.NotEqual(t, "pay-1", events[0].EventID, "the DLQ envelope receives a valid event_id")
 	assert.NotEmpty(t, events[0].Headers[inbox.HeaderError])
 }
 
@@ -236,7 +236,7 @@ func TestIntegrationMissingEventTypeToDLQ(t *testing.T) {
 	processor := inbox.NewProcessor("payment", db, inbox.NewGuard(), &flakyHandler{failTimes: 10}, pub, inbox.NewRouter("payment.events", 3), zap.NewNop())
 
 	_, err := outbox.NewEnvelope("", "payment.events", "pay-1", nil, []byte("{}"))
-	require.Error(t, err, "конверт без event_type не собирается")
+	require.Error(t, err, "an envelope without event_type cannot be built")
 
 	msg := inbox.Message{
 		Topic: "payment.events",

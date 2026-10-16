@@ -1,29 +1,29 @@
 # CBL-1.4. gRPC middleware
 
-| Поле | Значение |
+| Field | Value |
 | :-- | :-- |
-| Эпик | E1, общая библиотека |
-| Репозиторий | `cbl-kit`, пакет `grpcmw` |
-| Размер | M |
-| Волна и параллельная группа | W0-KIT |
-| Зависит от | 1.7 (CF-1) |
-| Контракты | маппинг ошибок и дедлайны из `CBL-003`, раздел 5 |
-| Статус | done (локально, ожидает коммита) |
+| Epic | E1, shared library |
+| Repository | `cbl-kit`, package `grpcmw` |
+| Size | M |
+| Wave and parallel group | W0-KIT |
+| Depends on | 1.7 (CF-1) |
+| Contracts | error mapping and deadlines from `CBL-003`, section 5 |
+| Status | done (locally, awaiting commit) |
 
-## 1. Контекст и цель
+## 1. Context and goal
 
-Единые интерсепторы для всех gRPC-сервисов: идентификатор запроса, структурированное
-логирование, защита от паник, маппинг доменных ошибок в gRPC-коды, проброс `request_id` и
-`traceparent`, извлечение `x-merchant-id` после mTLS.
+Unified interceptors for all gRPC services: request identifier, structured
+logging, panic protection, mapping of domain errors to gRPC codes, propagation of
+`request_id` and `traceparent`, extraction of `x-merchant-id` after mTLS.
 
-## 2. Границы
+## 2. Boundaries
 
-In scope: серверные и клиентские unary/stream интерсепторы, определение типов доменных ошибок.
-Out of scope: конкретные доменные ошибки сервисов, настройка TLS-креденшелов (в сервисах).
+In scope: server and client unary/stream interceptors, definition of domain error types.
+Out of scope: specific domain errors of services, configuration of TLS credentials (in services).
 
-## 3. Функциональные требования
+## 3. Functional requirements
 
-FR-1. Пакет определяет `errorsx`-совместимые виды ошибок (внутри `grpcmw`):
+FR-1. The package defines `errorsx`-compatible error kinds (inside `grpcmw`):
 
 ```go
 type Kind uint8 // NotFound, InvalidArgument, AlreadyExists, FailedPrecondition, ResourceExhausted, Unavailable, Internal
@@ -32,64 +32,66 @@ func E(kind Kind, code, message string, err error) *Error
 func KindOf(err error) Kind
 ```
 
-FR-2. `UnaryServer(log *zap.Logger) grpc.UnaryServerInterceptor` объединяет: recovery
-(panic -> Internal, логирование стека, panic не выходит наружу), request_id (из metadata или
-новый UUIDv7, кладется в ответные заголовки), логирование (метод, код, длительность),
-маппинг ошибок.
+FR-2. `UnaryServer(log *zap.Logger) grpc.UnaryServerInterceptor` combines: recovery
+(panic -> Internal, stack logging, the panic does not escape), request_id (from metadata or
+a new UUIDv7, placed into response headers), logging (method, code, duration),
+error mapping.
 
-FR-3. `MapError(err error) error`: `Error` -> `status.Error` с кодом
+FR-3. `MapError(err error) error`: `Error` -> `status.Error` with the code
 (`NotFound->codes.NotFound`, `InvalidArgument->InvalidArgument`, `AlreadyExists->AlreadyExists`,
 `FailedPrecondition->FailedPrecondition`, `ResourceExhausted->ResourceExhausted`,
-`Unavailable->Unavailable`, `Internal->Internal`); неизвестная ошибка -> `Internal` с
-сообщением "internal error" без утечки деталей.
+`Unavailable->Unavailable`, `Internal->Internal`); unknown error -> `Internal` with the
+message "internal error" without leaking details.
 
-FR-4. `UnaryClient(log *zap.Logger) grpc.UnaryClientInterceptor`: проброс `request_id` и
-`traceparent` в metadata, логирование исходящих вызовов и ошибок; лишние дедлайны не ставит.
+FR-4. `UnaryClient(log *zap.Logger) grpc.UnaryClientInterceptor`: propagation of `request_id`
+and `traceparent` into metadata, logging of outgoing calls and errors; it does not set extra
+deadlines.
 
-FR-5. `MerchantID(ctx) (string, error)`: читает `x-merchant-id` из входящей metadata; пустое
-значение - `InvalidArgument`. Helper `RequestID(ctx) string`.
+FR-5. `MerchantID(ctx) (string, error)`: reads `x-merchant-id` from incoming metadata; an empty
+value - `InvalidArgument`. Helper `RequestID(ctx) string`.
 
-FR-6. Stream-версии интерсепторов `StreamServer`, `StreamClient` с теми же правилами.
+FR-6. Stream versions of the interceptors `StreamServer`, `StreamClient` with the same rules.
 
-FR-7. Трассировка: пакет не дублирует `otelgrpc`; в README указано подключать
-`otelgrpc.NewServerHandler()` отдельно.
+FR-7. Tracing: the package does not duplicate `otelgrpc`; the README states that
+`otelgrpc.NewServerHandler()` must be connected separately.
 
-## 4. Контракты
+## 4. Contracts
 
-Маппинг кодов и правило бюджета дедлайнов - `CBL-003`, раздел 5. Metadata: `x-merchant-id`,
+Code mapping and the deadline budget rule - `CBL-003`, section 5. Metadata: `x-merchant-id`,
 `request_id`, `traceparent`.
 
-## 5. Модель данных и миграции
+## 5. Data model and migrations
 
-Не применимо.
+Not applicable.
 
-## 6. Конечные автоматы
+## 6. State machines
 
-Не применимо.
+Not applicable.
 
 ## 7. Edge cases
 
-Паника обработчика, ошибка без Kind (Internal), вложенные ошибки через `%w`, отсутствующая
-metadata, неверный формат request_id (перегенерация), конкурентные вызовы.
+Handler panic, error without Kind (Internal), nested errors via `%w`, missing
+metadata, invalid request_id format (regeneration), concurrent calls.
 
-## 8. Нефункциональные требования
+## 8. Non-functional requirements
 
-Оверхед интерсепторов не более 50 мкс на вызов. Unit-тесты через `bufconn` без сети.
+Interceptor overhead not more than 50 microseconds per call. Unit tests via `bufconn` without
+network.
 
-## 9. План тестов
+## 9. Test plan
 
-| Уровень | Сценарии |
+| Level | Scenarios |
 | :-- | :-- |
 | Smoke | `go build ./...` |
-| Unit | bufconn-сервер: успех, каждый Kind -> код, паника, request_id проброс, MerchantID |
-| Integration | не применимо |
-| E2E | не применимо |
-| Load | не применимо |
+| Unit | bufconn server: success, each Kind -> code, panic, request_id propagation, MerchantID |
+| Integration | not applicable |
+| E2E | not applicable |
+| Load | not applicable |
 
-## 10. План работ и коммит
+## 10. Work plan and commit
 
-Коммит `CBL-1.4: gRPC middleware с маппингом ошибок`; в текущей сессии без коммитов.
+Commit `CBL-1.4: gRPC middleware with error mapping`; no commits in the current session.
 
-## 11. Открытые вопросы
+## 11. Open questions
 
-- Бюджет дедлайна на клиенте оставлен сервисам: значения берутся из `CBL-003`, раздел 5.
+- The client deadline budget is left to the services: values are taken from `CBL-003`, section 5.

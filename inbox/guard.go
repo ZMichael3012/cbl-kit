@@ -12,19 +12,19 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// ErrInvalidMessage сообщает о некорректном входящем сообщении.
+// ErrInvalidMessage reports an invalid incoming message.
 var ErrInvalidMessage = errors.New("inbox: invalid message")
 
-// Guard обеспечивает однократную обработку события каждым консьюмером.
+// Guard ensures that each consumer processes an event only once.
 type Guard struct{}
 
-// NewGuard создает Guard.
+// NewGuard creates a Guard.
 func NewGuard() *Guard { return &Guard{} }
 
-// Process выполняет fn в одной транзакции со вставкой inbox-записи.
-// Если событие уже обработано, fn не вызывается и processed=false.
-// Ошибка fn откатывает всю транзакцию, включая inbox-запись, поэтому
-// повторная доставка снова вызовет обработчик.
+// Process runs fn in the same transaction as the inbox record insert.
+// If the event has already been processed, fn is not called and processed=false.
+// An fn error rolls back the whole transaction, including the inbox record, so
+// a redelivery calls the handler again.
 func (g *Guard) Process(ctx context.Context, db *gorm.DB, consumer, eventID string, fn func(tx *gorm.DB) error) (bool, error) {
 	if db == nil {
 		return false, errors.New("inbox: nil db")

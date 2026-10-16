@@ -1,5 +1,5 @@
-// Пакет kafkaconsumer читает Kafka-сообщения через franz-go и передает их
-// в inbox.Processor; офсеты коммитятся только после успешной обработки.
+// Package kafkaconsumer reads Kafka messages via franz-go and passes them
+// to inbox.Processor; offsets are committed only after successful processing.
 package kafkaconsumer
 
 import (
@@ -13,15 +13,15 @@ import (
 	"github.com/cbl/cbl-kit/inbox"
 )
 
-// Runner описывает цикл чтения Kafka с ручным коммитом офсетов.
+// Runner describes the Kafka read loop with manual offset commits.
 type Runner struct {
 	client    *kgo.Client
 	processor *inbox.Processor
 	log       *zap.Logger
 }
 
-// New создает Runner для списка топиков консьюмер-группы.
-// Автокоммит отключен: коммит выполняется только после успешной обработки.
+// New creates a Runner for the consumer group's topic list.
+// Auto-commit is disabled: a commit happens only after successful processing.
 func New(brokers []string, groupID string, topics []string, processor *inbox.Processor, log *zap.Logger, opts ...kgo.Opt) (*Runner, error) {
 	if processor == nil {
 		return nil, errors.New("kafkaconsumer: nil processor")
@@ -45,9 +45,9 @@ func New(brokers []string, groupID string, topics []string, processor *inbox.Pro
 	return &Runner{client: client, processor: processor, log: log}, nil
 }
 
-// Run читает и обрабатывает сообщения до отмены контекста.
-// При ошибке обработки офсеты батча не коммитятся, и сообщения доставляются
-// повторно; идемпотентность обеспечивает inbox.
+// Run reads and processes messages until the context is canceled.
+// On a processing error the batch offsets are not committed and the messages
+// are redelivered; the inbox ensures idempotency.
 func (r *Runner) Run(ctx context.Context) error {
 	for {
 		fetches := r.client.PollFetches(ctx)
@@ -97,10 +97,10 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 }
 
-// Close закрывает клиент.
+// Close closes the client.
 func (r *Runner) Close() { r.client.Close() }
 
-// headersFromRecord переводит заголовки Kafka в карту конверта.
+// headersFromRecord converts Kafka headers into an envelope map.
 func headersFromRecord(record *kgo.Record) map[string]string {
 	headers := make(map[string]string, len(record.Headers))
 	for _, h := range record.Headers {

@@ -7,33 +7,33 @@ import (
 	"time"
 )
 
-// Record описывает строку таблицы outbox (DDL в migrations/outbox.sql).
+// Record describes an outbox table row (DDL in migrations/outbox.sql).
 type Record struct {
-	// ID задает монотонный идентификатор строки.
+	// ID sets the monotonic row identifier.
 	ID int64 `gorm:"column:id;primaryKey"`
-	// EventID задает UUIDv7 события.
+	// EventID sets the event UUIDv7.
 	EventID string `gorm:"column:event_id;type:uuid;uniqueIndex"`
-	// Topic задает топик Kafka.
+	// Topic sets the Kafka topic.
 	Topic string `gorm:"column:topic"`
-	// Key задает ключ партиции.
+	// Key sets the partition key.
 	Key string `gorm:"column:key"`
-	// Headers задает заголовки события в формате jsonb.
+	// Headers sets the event headers in jsonb format.
 	Headers JSONHeaders `gorm:"column:headers;type:jsonb"`
-	// Payload задает тело события.
+	// Payload sets the event body.
 	Payload []byte `gorm:"column:payload"`
-	// CreatedAt задает время создания записи.
+	// CreatedAt sets the row creation time.
 	CreatedAt time.Time `gorm:"column:created_at"`
-	// PublishedAt задает время публикации; nil означает ожидание публикации.
+	// PublishedAt sets the publication time; nil means waiting for publication.
 	PublishedAt *time.Time `gorm:"column:published_at"`
 }
 
-// TableName задает имя таблицы outbox.
+// TableName sets the outbox table name.
 func (Record) TableName() string { return "outbox" }
 
-// JSONHeaders сериализует заголовки события в jsonb.
+// JSONHeaders serializes event headers to jsonb.
 type JSONHeaders map[string]string
 
-// Value реализует driver.Valuer для jsonb.
+// Value implements driver.Valuer for jsonb.
 func (h JSONHeaders) Value() (driver.Value, error) {
 	if h == nil {
 		return []byte("{}"), nil
@@ -45,7 +45,7 @@ func (h JSONHeaders) Value() (driver.Value, error) {
 	return raw, nil
 }
 
-// Scan реализует sql.Scanner для jsonb.
+// Scan implements sql.Scanner for jsonb.
 func (h *JSONHeaders) Scan(value any) error {
 	if value == nil {
 		*h = nil

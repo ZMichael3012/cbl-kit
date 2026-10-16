@@ -1,33 +1,33 @@
 # cbl-kit
 
-Общая Go-библиотека платформы CBL: денежный тип, HMAC-подпись, middleware Gin и gRPC,
-транзакционный outbox и идемпотентный inbox.
+Shared Go library of the CBL platform: money type, HMAC signing, Gin and gRPC
+middleware, transactional outbox, and idempotent inbox.
 
-Правила репозитория и конвенции: `AGENTS.md`, глобальные правила `../../AGENTS.md`.
-Спецификации задач: `.specs/CBL-1.*.md`.
+Repository rules and conventions: `AGENTS.md`, global rules `../../AGENTS.md`.
+Task specs: `.specs/CBL-1.*.md`.
 
-## Пакеты
+## Packages
 
-| Пакет | Назначение |
+| Package | Purpose |
 | :-- | :-- |
-| `money` | Денежный тип int64 + decimals, float запрещен |
-| `hmac` | Подпись вебхуков по сырому телу, окно replay |
+| `money` | Money type int64 + decimals, float forbidden |
+| `hmac` | Webhook signing over the raw body, replay window |
 | `ginmw` | request_id, problem+json, access log, recovery |
-| `grpcmw` | интерсепторы и маппинг доменных ошибок |
-| `outbox` | запись события в транзакции, relay, kafkapub |
-| `inbox` | Guard идемпотентности, retry/DLQ, kafkaconsumer |
+| `grpcmw` | Interceptors and domain error mapping |
+| `outbox` | Event write within a transaction, relay, kafkapub |
+| `inbox` | Idempotency guard, retry/DLQ, kafkaconsumer |
 
-## Команды
+## Commands
 
 ```powershell
 go build ./...
 go vet ./...
 go test ./... -cover
-go test -tags integration ./outbox/... ./inbox/...   # требует Docker (testcontainers)
+go test -tags integration ./outbox/... ./inbox/...   # requires Docker (testcontainers)
 ```
 
-## Миграции
+## Migrations
 
-`migrations/outbox.sql` и `migrations/inbox.sql` - reference DDL из
-`.specs/CBL-003-contracts.md`, копируются в сервисы как goose-миграции.
-`AutoMigrate` GORM запрещен.
+`migrations/outbox.sql` and `migrations/inbox.sql` are reference DDL from
+`.specs/CBL-003-contracts.md`, copied into services as goose migrations.
+GORM `AutoMigrate` is forbidden.

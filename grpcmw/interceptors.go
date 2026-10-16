@@ -14,19 +14,19 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// Имена элементов metadata, используемых платформой.
+// Names of the metadata elements used by the platform.
 const (
-	// MetadataMerchantID задает идентификатор мерчанта, проверенный на mTLS-периметре.
+	// MetadataMerchantID sets the merchant identifier verified at the mTLS perimeter.
 	MetadataMerchantID = "x-merchant-id"
-	// MetadataRequestID задает идентификатор запроса.
+	// MetadataRequestID sets the request identifier.
 	MetadataRequestID = "request_id"
-	// MetadataHTTPRequestID задает заголовок идентификатора из HTTP-периметра.
+	// MetadataHTTPRequestID sets the identifier header from the HTTP perimeter.
 	MetadataHTTPRequestID = "x-request-id"
 )
 
 type requestIDKey struct{}
 
-// RequestID возвращает идентификатор запроса из контекста или входящей metadata.
+// RequestID returns the request identifier from the context or the incoming metadata.
 func RequestID(ctx context.Context) string {
 	if v, ok := ctx.Value(requestIDKey{}).(string); ok {
 		return v
@@ -34,7 +34,7 @@ func RequestID(ctx context.Context) string {
 	return incomingRequestID(ctx)
 }
 
-// MerchantID возвращает x-merchant-id из входящей metadata.
+// MerchantID returns x-merchant-id from the incoming metadata.
 func MerchantID(ctx context.Context) (string, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
@@ -48,7 +48,7 @@ func MerchantID(ctx context.Context) (string, error) {
 	return "", E(KindInvalidArgument, "missing_merchant_id", "x-merchant-id не задан", nil)
 }
 
-// incomingRequestID извлекает идентификатор запроса из входящей metadata.
+// incomingRequestID extracts the request identifier from the incoming metadata.
 func incomingRequestID(ctx context.Context) string {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
@@ -64,7 +64,7 @@ func incomingRequestID(ctx context.Context) string {
 	return ""
 }
 
-// UnaryServer объединяет recovery, request_id, логирование и маппинг ошибок.
+// UnaryServer combines recovery, request_id, logging and error mapping.
 func UnaryServer(log *zap.Logger) grpc.UnaryServerInterceptor {
 	if log == nil {
 		log = zap.NewNop()
@@ -101,7 +101,7 @@ func UnaryServer(log *zap.Logger) grpc.UnaryServerInterceptor {
 	}
 }
 
-// UnaryClient пробрасывает request_id в исходящую metadata и логирует вызовы.
+// UnaryClient propagates request_id into the outgoing metadata and logs calls.
 func UnaryClient(log *zap.Logger) grpc.UnaryClientInterceptor {
 	if log == nil {
 		log = zap.NewNop()
@@ -122,7 +122,7 @@ func UnaryClient(log *zap.Logger) grpc.UnaryClientInterceptor {
 	}
 }
 
-// StreamServer объединяет recovery и маппинг ошибок потоковых вызовов.
+// StreamServer combines recovery and error mapping for streaming calls.
 func StreamServer(log *zap.Logger) grpc.StreamServerInterceptor {
 	if log == nil {
 		log = zap.NewNop()
@@ -146,7 +146,7 @@ func StreamServer(log *zap.Logger) grpc.StreamServerInterceptor {
 	}
 }
 
-// StreamClient пробрасывает request_id и логирует открытие потоковых вызовов.
+// StreamClient propagates request_id and logs opening of streaming calls.
 func StreamClient(log *zap.Logger) grpc.StreamClientInterceptor {
 	if log == nil {
 		log = zap.NewNop()
@@ -164,7 +164,7 @@ func StreamClient(log *zap.Logger) grpc.StreamClientInterceptor {
 	}
 }
 
-// logCall пишет структурированную запись о вызове с учетом кода статуса.
+// logCall writes a structured call record taking the status code into account.
 func logCall(log *zap.Logger, method, requestID string, dur time.Duration, err error) {
 	fields := []zap.Field{
 		zap.String("method", method),

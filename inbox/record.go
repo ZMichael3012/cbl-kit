@@ -1,19 +1,19 @@
-// Пакет inbox реализует идемпотентную обработку Kafka-событий:
-// Guard отсекает дубликаты по паре (consumer, event_id), Processor
-// маршрутизирует ошибочные сообщения в retry-топики и DLQ.
+// Package inbox implements idempotent processing of Kafka events:
+// the Guard filters out duplicates by the (consumer, event_id) pair, the Processor
+// routes failed messages to retry topics and the DLQ.
 package inbox
 
 import "time"
 
-// Record описывает строку таблицы inbox (DDL в migrations/inbox.sql).
+// Record describes a row of the inbox table (DDL in migrations/inbox.sql).
 type Record struct {
-	// Consumer задает имя консьюмера (группы) платформы.
+	// Consumer sets the platform consumer (group) name.
 	Consumer string `gorm:"column:consumer;primaryKey"`
-	// EventID задает UUIDv7 события.
+	// EventID sets the event UUIDv7.
 	EventID string `gorm:"column:event_id;type:uuid;primaryKey"`
-	// ProcessedAt задает время обработки события.
+	// ProcessedAt sets the event processing time.
 	ProcessedAt time.Time `gorm:"column:processed_at"`
 }
 
-// TableName задает имя таблицы inbox.
+// TableName sets the inbox table name.
 func (Record) TableName() string { return "inbox" }

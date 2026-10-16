@@ -1,30 +1,30 @@
-# CBL-1.1. Тип Money
+# CBL-1.1. Money type
 
-| Поле | Значение |
+| Field | Value |
 | :-- | :-- |
-| Эпик | E1, общая библиотека |
-| Репозиторий | `cbl-kit`, пакет `money` |
-| Размер | S |
-| Волна и параллельная группа | W0-KIT |
-| Зависит от | нет |
-| Контракты | не меняются |
-| Статус | done (локально, ожидает коммита) |
+| Epic | E1, shared library |
+| Repository | `cbl-kit`, package `money` |
+| Size | S |
+| Wave and parallel group | W0-KIT |
+| Depends on | none |
+| Contracts | unchanged |
+| Status | done (locally, awaiting commit) |
 
-## 1. Контекст и цель
+## 1. Context and goal
 
-Денежный тип для всей платформы: `int64` в минимальных единицах плюс `decimals` актива
-(`CBL-000`, инвариант 1). Float запрещен полностью, включая промежуточные вычисления.
+Money type for the entire platform: `int64` in minor units plus the asset `decimals`
+(`CBL-000`, invariant 1). Float is forbidden entirely, including intermediate calculations.
 
-## 2. Границы
+## 2. Boundaries
 
-In scope: пакет `money` в `cbl-kit`.
-Out of scope: курсы и котировки (Quote), Decimal-арифметика курсов.
+In scope: the `money` package in `cbl-kit`.
+Out of scope: rates and quotes (Quote), decimal arithmetic of rates.
 
-## 3. Функциональные требования
+## 3. Functional requirements
 
-FR-1. Тип `Money` (значение): поля `MinorUnits int64`, `Asset string`, `Decimals uint32`.
+FR-1. The `Money` type (a value): fields `MinorUnits int64`, `Asset string`, `Decimals uint32`.
 
-FR-2. API пакета:
+FR-2. Package API:
 
 ```go
 func New(minorUnits int64, asset string, decimals uint32) (Money, error)
@@ -39,52 +39,54 @@ func (m Money) IsZero() bool
 func (m Money) Cmp(o Money) (int, error)
 ```
 
-FR-3. `Add`/`Sub`/`Cmp` требуют совпадения `Asset` и `Decimals`, иначе ошибка; переполнение
-int64 детектируется (в том числе `Sub` у границ и `Neg` от `math.MinInt64` возвращает ошибку
-через отдельный вариант API, если Neg не может быть безошибочным - выбрать и обосновать в спеке).
+FR-3. `Add`/`Sub`/`Cmp` require matching `Asset` and `Decimals`, otherwise an error; int64
+overflow is detected (including `Sub` at the boundaries and `Neg` of `math.MinInt64`
+returning an error through a separate API variant if `Neg` cannot be error-free - to choose
+and justify in the spec).
 
-FR-4. `Parse` принимает десятичную строку без экспоненты, не более `decimals` знаков после
-точки; лишние нули допустимы; отрицательные значения допустимы; пустая строка, точка без цифр,
-пробелы - ошибка.
+FR-4. `Parse` accepts a decimal string without an exponent, with at most `decimals` digits
+after the decimal point; extra zeros are allowed; negative values are allowed; an empty
+string, a point without digits, whitespace - an error.
 
-FR-5. `String` печатает десятичную строку с ровно `decimals` знаками после точки.
+FR-5. `String` prints a decimal string with exactly `decimals` digits after the decimal point.
 
-## 4. Контракты
+## 4. Contracts
 
-Совместим с REST-правилом `CBL-003` (строка-десятичное число плюс код актива) и
+Compatible with the REST rule from `CBL-003` (a decimal string plus the asset code) and
 `billing.common.v1.Money` (minor_units, asset, decimals).
 
-## 5. Модель данных и миграции
+## 5. Data model and migrations
 
-Не применимо.
+Not applicable.
 
-## 6. Конечные автоматы
+## 6. State machines
 
-Не применимо.
+Not applicable.
 
 ## 7. Edge cases
 
-`math.MaxInt64`/`math.MinInt64`, переполнение при Add/Sub/MulInt, decimals = 0 и 18,
-`"100"`, `"100.50"`, `"0.000001"`, `"-1.23"`, `"1e2"` (ошибка), ведущие нули, длинные строки.
+`math.MaxInt64`/`math.MinInt64`, overflow in Add/Sub/MulInt, decimals = 0 and 18,
+`"100"`, `"100.50"`, `"0.000001"`, `"-1.23"`, `"1e2"` (error), leading zeros, long strings.
 
-## 8. Нефункциональные требования
+## 8. Non-functional requirements
 
-Пакет без внешних зависимостей кроме stdlib. Покрытие тестами пакета не ниже 95%.
+The package has no external dependencies other than the stdlib. Package test coverage is at
+least 95%.
 
-## 9. План тестов
+## 9. Test plan
 
-| Уровень | Сценарии |
+| Level | Scenarios |
 | :-- | :-- |
 | Smoke | `go build ./...`, `go vet ./...` |
-| Unit | табличные тесты всех функций, границы int64, переполнения, формат/парсинг round-trip |
-| Integration | не применимо |
-| E2E | не применимо |
-| Load | не применимо |
+| Unit | table-driven tests of all functions, int64 boundaries, overflows, format/parse round-trip |
+| Integration | not applicable |
+| E2E | not applicable |
+| Load | not applicable |
 
-## 10. План работ и коммит
+## 10. Work plan and commit
 
-Коммит `CBL-1.1: тип Money с арифметикой без float`; в текущей сессии без коммитов.
+Commit `CBL-1.1: Money type with arithmetic without float`; no commits in the current session.
 
-## 11. Открытые вопросы
+## 11. Open questions
 
-- Нужен ли `Split`/`Allocate` для распределения сумм: оставить на задачу 2.4 при необходимости.
+- Whether `Split`/`Allocate` are needed for distributing amounts: leave to task 2.4 if required.

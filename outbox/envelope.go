@@ -1,6 +1,6 @@
-// Пакет outbox реализует транзакционный outbox и relay публикации событий.
-// Событие пишется в ту же транзакцию, что и бизнес-данные, а relay публикует
-// его в Kafka по модели at-least-once.
+// Package outbox implements the transactional outbox and the event publication relay.
+// An event is written in the same transaction as the business data, and the relay
+// publishes it to Kafka with at-least-once delivery.
 package outbox
 
 import (
@@ -12,40 +12,40 @@ import (
 	"github.com/google/uuid"
 )
 
-// ErrInvalidEnvelope сообщает о некорректном конверте события.
+// ErrInvalidEnvelope reports an invalid event envelope.
 var ErrInvalidEnvelope = errors.New("outbox: invalid envelope")
 
-// Имена служебных заголовков события (конверт CBL).
+// Names of the service event headers (the CBL envelope).
 const (
-	// HeaderEventID задает UUIDv7 события, ключ идемпотентности inbox.
+	// HeaderEventID sets the event UUIDv7, the inbox idempotency key.
 	HeaderEventID = "event_id"
-	// HeaderEventType задает тип события, например payment.completed.
+	// HeaderEventType sets the event type, for example payment.completed.
 	HeaderEventType = "event_type"
-	// HeaderOccurredAt задает время события в RFC 3339 UTC.
+	// HeaderOccurredAt sets the event time in RFC 3339 UTC.
 	HeaderOccurredAt = "occurred_at"
-	// HeaderProducer задает сервис-продюсер события.
+	// HeaderProducer sets the producing service of the event.
 	HeaderProducer = "producer"
-	// HeaderTraceparent задает W3C trace context.
+	// HeaderTraceparent sets the W3C trace context.
 	HeaderTraceparent = "traceparent"
-	// HeaderSchemaVersion задает версию схемы события.
+	// HeaderSchemaVersion sets the event schema version.
 	HeaderSchemaVersion = "schema_version"
 )
 
-// Envelope описывает событие outbox, готовое к публикации.
+// Envelope describes an outbox event ready for publication.
 type Envelope struct {
-	// EventID задает UUIDv7 события.
+	// EventID sets the event UUIDv7.
 	EventID string
-	// Topic задает топик Kafka.
+	// Topic sets the Kafka topic.
 	Topic string
-	// Key задает ключ партиции.
+	// Key sets the partition key.
 	Key string
-	// Headers задает заголовки события.
+	// Headers sets the event headers.
 	Headers map[string]string
-	// Payload задает сериализованное тело события.
+	// Payload sets the serialized event body.
 	Payload []byte
 }
 
-// NewEnvelope создает конверт события; event_id генерируется как UUIDv7, если не задан.
+// NewEnvelope creates an event envelope; event_id is generated as a UUIDv7 when not set.
 func NewEnvelope(eventType, topic, key string, headers map[string]string, payload []byte) (Envelope, error) {
 	merged := make(map[string]string, len(headers)+4)
 	for k, v := range headers {
@@ -71,7 +71,7 @@ func NewEnvelope(eventType, topic, key string, headers map[string]string, payloa
 	return env, nil
 }
 
-// Validate проверяет обязательные поля конверта.
+// Validate checks the required envelope fields.
 func (e Envelope) Validate() error {
 	if _, err := uuid.Parse(e.EventID); err != nil {
 		return fmt.Errorf("%w: event_id %q", ErrInvalidEnvelope, e.EventID)

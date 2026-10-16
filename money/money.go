@@ -1,6 +1,6 @@
-// Пакет money предоставляет денежный тип платформы CBL.
-// Деньги хранятся как int64 в минимальных единицах актива плюс decimals,
-// арифметика с плавающей точкой запрещена на уровне API пакета.
+// Package money provides the CBL platform money type.
+// Money is stored as int64 in asset minor units plus decimals,
+// and floating point arithmetic is forbidden at the package API level.
 package money
 
 import (
@@ -11,36 +11,36 @@ import (
 	"strings"
 )
 
-// MaxDecimals задает максимальное допустимое количество знаков после точки.
+// MaxDecimals sets the maximum allowed number of digits after the decimal point.
 const MaxDecimals uint32 = 18
 
-// Ошибки пакета возвращаются обернутыми через fmt.Errorf с %w.
+// Package errors are returned wrapped through fmt.Errorf with %w.
 var (
-	// ErrInvalidAsset сообщает о пустом или некорректном коде актива.
+	// ErrInvalidAsset reports an empty or invalid asset code.
 	ErrInvalidAsset = errors.New("money: invalid asset")
-	// ErrInvalidDecimals сообщает о недопустимом количестве знаков после точки.
+	// ErrInvalidDecimals reports an invalid number of digits after the decimal point.
 	ErrInvalidDecimals = errors.New("money: invalid decimals")
-	// ErrInvalidAmount сообщает о некорректной сумме.
+	// ErrInvalidAmount reports an invalid amount.
 	ErrInvalidAmount = errors.New("money: invalid amount")
-	// ErrAssetMismatch сообщает о несовпадении кодов активов при операции.
+	// ErrAssetMismatch reports an asset code mismatch in an operation.
 	ErrAssetMismatch = errors.New("money: asset mismatch")
-	// ErrDecimalsMismatch сообщает о несовпадении decimals при операции.
+	// ErrDecimalsMismatch reports a decimals mismatch in an operation.
 	ErrDecimalsMismatch = errors.New("money: decimals mismatch")
-	// ErrOverflow сообщает о переполнении int64 при арифметике.
+	// ErrOverflow reports an int64 overflow in arithmetic.
 	ErrOverflow = errors.New("money: overflow")
 )
 
-// Money описывает денежную сумму в минимальных единицах актива.
+// Money describes a monetary amount in asset minor units.
 type Money struct {
-	// MinorUnits задает сумму в минимальных единицах актива.
+	// MinorUnits sets the amount in asset minor units.
 	MinorUnits int64
-	// Asset задает код актива, например USDT.
+	// Asset sets the asset code, for example USDT.
 	Asset string
-	// Decimals задает количество знаков после точки.
+	// Decimals sets the number of digits after the decimal point.
 	Decimals uint32
 }
 
-// New создает Money с валидацией актива и decimals.
+// New creates Money with asset and decimals validation.
 func New(minorUnits int64, asset string, decimals uint32) (Money, error) {
 	if strings.TrimSpace(asset) == "" {
 		return Money{}, fmt.Errorf("%w: empty asset", ErrInvalidAsset)
@@ -51,7 +51,7 @@ func New(minorUnits int64, asset string, decimals uint32) (Money, error) {
 	return Money{MinorUnits: minorUnits, Asset: asset, Decimals: decimals}, nil
 }
 
-// Parse разбирает десятичную строку в Money; экспоненциальная запись запрещена.
+// Parse parses a decimal string into Money; exponential notation is forbidden.
 func Parse(value, asset string, decimals uint32) (Money, error) {
 	if _, err := New(0, asset, decimals); err != nil {
 		return Money{}, err
@@ -90,7 +90,7 @@ func Parse(value, asset string, decimals uint32) (Money, error) {
 	return New(units, asset, decimals)
 }
 
-// MustParse разбирает строку и паникует при ошибке; допустим только для констант и тестов.
+// MustParse parses the value and panics on error; it is allowed only for constants and tests.
 func MustParse(value, asset string, decimals uint32) Money {
 	m, err := Parse(value, asset, decimals)
 	if err != nil {
@@ -99,12 +99,12 @@ func MustParse(value, asset string, decimals uint32) Money {
 	return m
 }
 
-// String печатает десятичную строку с ровно Decimals знаками после точки.
+// String renders a decimal string with exactly Decimals digits after the decimal point.
 func (m Money) String() string {
 	var u uint64
 	if m.MinorUnits < 0 {
-		// -(m.MinorUnits + 1) не превышает MaxInt64, преобразование безопасно.
-		u = uint64(-(m.MinorUnits + 1)) + 1 //nolint:gosec // G115: значение всегда положительно и в границах uint64
+		// -(m.MinorUnits + 1) does not exceed MaxInt64, so the conversion is safe.
+		u = uint64(-(m.MinorUnits + 1)) + 1 //nolint:gosec // G115: the value is always positive and within uint64 bounds
 	} else {
 		u = uint64(m.MinorUnits)
 	}
@@ -128,7 +128,7 @@ func (m Money) String() string {
 	return out
 }
 
-// Add складывает суммы; требует совпадения актива и decimals.
+// Add adds amounts; it requires matching asset and decimals.
 func (m Money) Add(o Money) (Money, error) {
 	if err := m.checkCompatible(o); err != nil {
 		return Money{}, err
@@ -140,7 +140,7 @@ func (m Money) Add(o Money) (Money, error) {
 	return Money{MinorUnits: sum, Asset: m.Asset, Decimals: m.Decimals}, nil
 }
 
-// Sub вычитает сумму; требует совпадения актива и decimals.
+// Sub subtracts an amount; it requires matching asset and decimals.
 func (m Money) Sub(o Money) (Money, error) {
 	if err := m.checkCompatible(o); err != nil {
 		return Money{}, err
@@ -152,7 +152,7 @@ func (m Money) Sub(o Money) (Money, error) {
 	return Money{MinorUnits: diff, Asset: m.Asset, Decimals: m.Decimals}, nil
 }
 
-// MulInt умножает сумму на целое число с проверкой переполнения.
+// MulInt multiplies the amount by an integer with overflow checking.
 func (m Money) MulInt(k int64) (Money, error) {
 	if m.MinorUnits == 0 || k == 0 {
 		return Money{MinorUnits: 0, Asset: m.Asset, Decimals: m.Decimals}, nil
@@ -170,7 +170,7 @@ func (m Money) MulInt(k int64) (Money, error) {
 	return Money{MinorUnits: res, Asset: m.Asset, Decimals: m.Decimals}, nil
 }
 
-// Neg возвращает сумму с противоположным знаком; для math.MinInt64 возвращает ошибку.
+// Neg returns the amount with the opposite sign; it returns an error for math.MinInt64.
 func (m Money) Neg() (Money, error) {
 	if m.MinorUnits == math.MinInt64 {
 		return Money{}, fmt.Errorf("%w: neg of min int64", ErrOverflow)
@@ -178,10 +178,10 @@ func (m Money) Neg() (Money, error) {
 	return Money{MinorUnits: -m.MinorUnits, Asset: m.Asset, Decimals: m.Decimals}, nil
 }
 
-// IsZero сообщает, что сумма равна нулю.
+// IsZero reports that the amount is zero.
 func (m Money) IsZero() bool { return m.MinorUnits == 0 }
 
-// Cmp сравнивает суммы; требует совпадения актива и decimals.
+// Cmp compares amounts; it requires matching asset and decimals.
 func (m Money) Cmp(o Money) (int, error) {
 	if err := m.checkCompatible(o); err != nil {
 		return 0, err
@@ -196,7 +196,7 @@ func (m Money) Cmp(o Money) (int, error) {
 	}
 }
 
-// checkCompatible проверяет совпадение актива и decimals перед арифметикой.
+// checkCompatible validates matching asset and decimals before arithmetic.
 func (m Money) checkCompatible(o Money) error {
 	if m.Asset != o.Asset {
 		return fmt.Errorf("%w: %q vs %q", ErrAssetMismatch, m.Asset, o.Asset)
@@ -207,7 +207,7 @@ func (m Money) checkCompatible(o Money) error {
 	return nil
 }
 
-// isDigits сообщает, что строка непуста и состоит только из цифр.
+// isDigits reports that the string is non-empty and consists of digits only.
 func isDigits(s string) bool {
 	if s == "" {
 		return false
@@ -220,7 +220,7 @@ func isDigits(s string) bool {
 	return true
 }
 
-// parseMinorUnits переводит строку цифр в int64 с учетом знака и границ int64.
+// parseMinorUnits converts a digit string to int64 taking the sign and int64 bounds into account.
 func parseMinorUnits(digits string, neg bool) (int64, error) {
 	u, err := strconv.ParseUint(digits, 10, 64)
 	if err != nil {
@@ -236,7 +236,7 @@ func parseMinorUnits(digits string, neg bool) (int64, error) {
 	if neg && u == 1<<63 {
 		return math.MinInt64, nil
 	}
-	units := int64(u) //nolint:gosec // G115: u проверен сверху limit (MaxInt64 или 1<<63)
+	units := int64(u) //nolint:gosec // G115: u was checked against limit above (MaxInt64 or 1<<63)
 	if neg {
 		units = -units
 	}

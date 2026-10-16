@@ -1,5 +1,5 @@
--- Outbox-таблица платформы CBL: reference DDL из .specs/CBL-003-contracts.md.
--- Копируется в сервис как goose-миграция; AutoMigrate GORM запрещен.
+-- Outbox table of the CBL platform: reference DDL from .specs/CBL-003-contracts.md.
+-- Copied into a service as a goose migration; GORM AutoMigrate is forbidden.
 CREATE TABLE IF NOT EXISTS outbox (
     id           bigserial PRIMARY KEY,
     event_id     uuid        NOT NULL UNIQUE,
@@ -11,5 +11,5 @@ CREATE TABLE IF NOT EXISTS outbox (
     published_at timestamptz
 );
 
--- Partial-индекс ускоряет polling неопубликованных событий.
+-- The partial index speeds up polling of unpublished events.
 CREATE INDEX IF NOT EXISTS outbox_pending_idx ON outbox (id) WHERE published_at IS NULL;

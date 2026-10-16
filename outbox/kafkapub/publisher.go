@@ -1,4 +1,4 @@
-// Пакет kafkapub публикует конверты outbox в Kafka через franz-go.
+// Package kafkapub publishes outbox envelopes to Kafka via franz-go.
 package kafkapub
 
 import (
@@ -11,16 +11,16 @@ import (
 	"github.com/cbl/cbl-kit/outbox"
 )
 
-// Publisher публикует события в Kafka идемпотентным продюсером.
+// Publisher publishes events to Kafka with an idempotent producer.
 type Publisher struct {
 	client *kgo.Client
 }
 
-// New создает Publisher с идемпотентным продюсером и acks=all.
+// New creates a Publisher with an idempotent producer and acks=all.
 func New(brokers []string, opts ...kgo.Opt) (*Publisher, error) {
-	// RecordDeliveryTimeout ограничивает время публикации: relay вызывает Publish
-	// внутри транзакции БД, и бесконечное ожидание несуществующего топика
-	// недопустимо удерживает блокировки (T-KK5).
+	// RecordDeliveryTimeout limits the publication time: the relay calls Publish
+	// inside a DB transaction, and an endless wait for a non-existent topic
+	// unacceptably holds row locks (T-KK5).
 	base := []kgo.Opt{
 		kgo.SeedBrokers(brokers...),
 		kgo.RequiredAcks(kgo.AllISRAcks()),
@@ -34,7 +34,7 @@ func New(brokers []string, opts ...kgo.Opt) (*Publisher, error) {
 	return &Publisher{client: client}, nil
 }
 
-// Publish отправляет конверт в топик с заголовками события.
+// Publish sends the envelope to the topic with the event headers.
 func (p *Publisher) Publish(ctx context.Context, env outbox.Envelope) error {
 	record := &kgo.Record{
 		Topic: env.Topic,
@@ -50,7 +50,7 @@ func (p *Publisher) Publish(ctx context.Context, env outbox.Envelope) error {
 	return nil
 }
 
-// Close закрывает клиент, дожидаясь доставки буферизованных записей.
+// Close closes the client, waiting for buffered records to be delivered.
 func (p *Publisher) Close() {
 	p.client.Close()
 }

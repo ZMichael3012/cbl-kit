@@ -11,18 +11,18 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// Publisher публикует конверт во внешнюю шину.
+// Publisher publishes an envelope to the external bus.
 type Publisher interface {
-	// Publish отправляет событие в топик; ошибка означает, что событие
-	// осталось неопубликованным и будет повторено следующим циклом relay.
+	// Publish sends the event to the topic; an error means that the event
+	// remained unpublished and will be retried by the next relay cycle.
 	Publish(ctx context.Context, env Envelope) error
 }
 
-// Metrics описывает метрики relay; реализация по умолчанию ничего не делает.
+// Metrics describes the relay metrics; the default implementation does nothing.
 type Metrics interface {
-	// AddPublished учитывает опубликованные события по топику.
+	// AddPublished accounts for published events by topic.
 	AddPublished(n int, topic string)
-	// SetPending устанавливает число неопубликованных событий по топику.
+	// SetPending sets the number of unpublished events by topic.
 	SetPending(n int, topic string)
 }
 
@@ -31,7 +31,7 @@ type noopMetrics struct{}
 func (noopMetrics) AddPublished(int, string) {}
 func (noopMetrics) SetPending(int, string)   {}
 
-// Relay публикует неопубликованные события из outbox.
+// Relay publishes unpublished events from the outbox.
 type Relay struct {
 	db       *gorm.DB
 	pub      Publisher
@@ -41,10 +41,10 @@ type Relay struct {
 	metrics  Metrics
 }
 
-// Option настраивает Relay.
+// Option configures Relay.
 type Option func(*Relay)
 
-// WithBatch задает размер пачки публикации.
+// WithBatch sets the publication batch size.
 func WithBatch(n int) Option {
 	return func(r *Relay) {
 		if n > 0 {
@@ -53,7 +53,7 @@ func WithBatch(n int) Option {
 	}
 }
 
-// WithInterval задает интервал цикла публикации.
+// WithInterval sets the publication cycle interval.
 func WithInterval(d time.Duration) Option {
 	return func(r *Relay) {
 		if d > 0 {
@@ -62,7 +62,7 @@ func WithInterval(d time.Duration) Option {
 	}
 }
 
-// WithMetrics подключает метрики relay.
+// WithMetrics attaches the relay metrics.
 func WithMetrics(m Metrics) Option {
 	return func(r *Relay) {
 		if m != nil {
@@ -71,7 +71,7 @@ func WithMetrics(m Metrics) Option {
 	}
 }
 
-// NewRelay создает relay публикации outbox.
+// NewRelay creates an outbox publication relay.
 func NewRelay(db *gorm.DB, pub Publisher, log *zap.Logger, opts ...Option) *Relay {
 	if log == nil {
 		log = zap.NewNop()
@@ -90,10 +90,10 @@ func NewRelay(db *gorm.DB, pub Publisher, log *zap.Logger, opts ...Option) *Rela
 	return r
 }
 
-// PublishBatch публикует неопубликованные события пачками до опустошения outbox.
-// Строки захватываются через FOR UPDATE SKIP LOCKED, поэтому несколько relay
-// могут работать конкурентно. При ошибке публикации транзакция откатывается,
-// и события остаются неопубликованными для следующего цикла.
+// PublishBatch publishes unpublished events in batches until the outbox is empty.
+// Rows are locked with FOR UPDATE SKIP LOCKED, so several relays can run
+// concurrently. On a publication error the transaction is rolled back and the
+// events remain unpublished for the next cycle.
 func (r *Relay) PublishBatch(ctx context.Context) (int, error) {
 	if r.db == nil || r.pub == nil {
 		return 0, errors.New("outbox: relay is not configured")
@@ -145,7 +145,7 @@ func (r *Relay) PublishBatch(ctx context.Context) (int, error) {
 	}
 }
 
-// Run публикует события до отмены контекста.
+// Run publishes events until the context is canceled.
 func (r *Relay) Run(ctx context.Context) error {
 	if r.db == nil || r.pub == nil {
 		return errors.New("outbox: relay is not configured")
@@ -170,7 +170,7 @@ func (r *Relay) Run(ctx context.Context) error {
 	}
 }
 
-// updatePending публикует метрику числа неопубликованных событий по топикам.
+// updatePending emits the metric of unpublished event counts per topic.
 func (r *Relay) updatePending(ctx context.Context) {
 	type row struct {
 		Topic string

@@ -14,25 +14,25 @@ import (
 	"github.com/cbl/cbl-kit/outbox"
 )
 
-// Message описывает входящее сообщение консьюмера.
+// Message describes an incoming consumer message.
 type Message struct {
-	// Topic задает топик доставки.
+	// Topic sets the delivery topic.
 	Topic string
-	// Key задает ключ сообщения.
+	// Key sets the message key.
 	Key string
-	// Headers задает заголовки конверта.
+	// Headers sets the envelope headers.
 	Headers map[string]string
-	// Value задает тело события.
+	// Value sets the event body.
 	Value []byte
 }
 
-// Handler обрабатывает событие в транзакции, предоставленной Guard.
+// Handler processes an event in the transaction provided by the Guard.
 type Handler interface {
-	// Handle выполняет бизнес-эффект идемпотентно в переданной транзакции.
+	// Handle performs the business effect idempotently in the given transaction.
 	Handle(ctx context.Context, tx *gorm.DB, msg Message) error
 }
 
-// Processor связывает Guard, Handler и маршрутизацию повторной доставки.
+// Processor ties together the Guard, the Handler and retry routing.
 type Processor struct {
 	consumer string
 	db       *gorm.DB
@@ -43,7 +43,7 @@ type Processor struct {
 	log      *zap.Logger
 }
 
-// NewProcessor создает Processor; nil-зависимости guard, router и log заменяются значениями по умолчанию.
+// NewProcessor creates a Processor; nil guard, router and log dependencies are replaced with defaults.
 func NewProcessor(consumer string, db *gorm.DB, guard *Guard, handler Handler, pub outbox.Publisher, router *Router, log *zap.Logger) *Processor {
 	if guard == nil {
 		guard = NewGuard()
@@ -65,17 +65,17 @@ func NewProcessor(consumer string, db *gorm.DB, guard *Guard, handler Handler, p
 	}
 }
 
-// Process обрабатывает сообщение: дубликаты пропускаются, при ошибке сообщение
-// уходит в retry-топик или DLQ. Возврат nil означает подтверждение исходного
-// сообщения; возврат ошибки оставляет исходное сообщение на повторную доставку.
+// Process handles a message: duplicates are skipped, and on error the message
+// goes to a retry topic or the DLQ. Returning nil acknowledges the original
+// message; returning an error leaves the original message for redelivery.
 func (p *Processor) Process(ctx context.Context, msg Message) error {
 	if p.db == nil || p.handler == nil {
 		return errors.New("inbox: processor is not configured")
 	}
 	eventID := strings.TrimSpace(msg.Headers[outbox.HeaderEventID])
 	if eventID == "" {
-		// Сообщение без event_id нельзя ни дедуплицировать, ни ретраить:
-		// оно отправляется сразу в DLQ, иначе партиция встанет в бесконечную редоставку.
+		// A message without event_id can be neither deduplicated nor retried:
+		// it goes straight to the DLQ, otherwise the partition would loop on redelivery.
 		return p.sendToDLQ(ctx, msg, fmt.Errorf("%w: %s отсутствует", ErrInvalidMessage, outbox.HeaderEventID))
 	}
 	processed, err := p.guard.Process(ctx, p.db, p.consumer, eventID, func(tx *gorm.DB) error {
@@ -94,9 +94,9 @@ func (p *Processor) Process(ctx context.Context, msg Message) error {
 	destination, isDLQ := p.router.Next(msg.Topic, attempt)
 	env, envErr := p.retryEnvelope(msg, destination, attempt, err)
 	if envErr != nil {
-		// Конверт повтора не собрать (битый event_id или отсутствующий event_type):
-		// редоставка такого сообщения зациклила бы партицию, поэтому оно уходит
-		// в DLQ с санитизацией служебных полей.
+		// The retry envelope cannot be built (broken event_id or missing event_type):
+		// redelivering such a message would loop the partition, so it goes to the
+		// DLQ with sanitized service fields.
 		return p.sendToDLQ(ctx, msg, errors.Join(err, envErr))
 	}
 	if pubErr := p.pub.Publish(ctx, env); pubErr != nil {
@@ -119,11 +119,11 @@ func (p *Processor) Process(ctx context.Context, msg Message) error {
 	return nil
 }
 
-// sendToDLQ публикует необрабатываемое сообщение в DLQ и подтверждает исходное.
-// Публикация невозможна без publisher: тогда ошибка возвращается, чтобы сообщение
-// не потерялось молча. Невалидный event_id заменяется свежим UUIDv7 (исходное
-// значение сохраняется в x-original-event-id), отсутствующий event_type - "unknown",
-// иначе DLQ-конверт не прошел бы валидацию и сообщение зациклило бы партицию.
+// sendToDLQ publishes an unprocessable message to the DLQ and acknowledges the original.
+// Publication is impossible without a publisher: then the error is returned so that the
+// message is not lost silently. An invalid event_id is replaced with a fresh UUIDv7 (the
+// original value is preserved in x-original-event-id), a missing event_type becomes "unknown",
+// otherwise the DLQ envelope would not pass validation and the message would loop the partition.
 func (p *Processor) sendToDLQ(ctx context.Context, msg Message, cause error) error {
 	if p.pub == nil {
 		return cause
@@ -163,7 +163,7 @@ func (p *Processor) sendToDLQ(ctx context.Context, msg Message, cause error) err
 	return nil
 }
 
-// retryEnvelope формирует конверт повторной доставки с сохранением event_id.
+// retryEnvelope builds a redelivery envelope while preserving the event_id.
 func (p *Processor) retryEnvelope(msg Message, destination string, attempt int, cause error) (outbox.Envelope, error) {
 	headers := make(map[string]string, len(msg.Headers)+2)
 	for k, v := range msg.Headers {

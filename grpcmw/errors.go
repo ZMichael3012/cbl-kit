@@ -1,4 +1,4 @@
-// Пакет grpcmw содержит типы ошибок и gRPC-интерсепторы платформы CBL.
+// Package grpcmw contains the error types and gRPC interceptors of the CBL platform.
 package grpcmw
 
 import (
@@ -8,28 +8,28 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// Kind описывает класс доменной ошибки для маппинга в gRPC-код и HTTP-статус.
+// Kind describes the class of a domain error for mapping to a gRPC code and an HTTP status.
 type Kind uint8
 
-// Классы ошибок платформы.
+// Platform error classes.
 const (
-	// KindInternal описывает внутреннюю ошибку без деталей наружу.
+	// KindInternal describes an internal error with no details exposed outward.
 	KindInternal Kind = iota
-	// KindNotFound описывает отсутствующую сущность.
+	// KindNotFound describes a missing entity.
 	KindNotFound
-	// KindInvalidArgument описывает некорректный запрос.
+	// KindInvalidArgument describes an invalid request.
 	KindInvalidArgument
-	// KindAlreadyExists описывает конфликт создания.
+	// KindAlreadyExists describes a creation conflict.
 	KindAlreadyExists
-	// KindFailedPrecondition описывает недопустимое состояние сущности.
+	// KindFailedPrecondition describes an invalid entity state.
 	KindFailedPrecondition
-	// KindResourceExhausted описывает превышение лимита.
+	// KindResourceExhausted describes a limit excess.
 	KindResourceExhausted
-	// KindUnavailable описывает недоступность зависимости.
+	// KindUnavailable describes dependency unavailability.
 	KindUnavailable
 )
 
-// String возвращает текстовое имя класса ошибки.
+// String returns the text name of the error class.
 func (k Kind) String() string {
 	switch k {
 	case KindNotFound:
@@ -49,19 +49,19 @@ func (k Kind) String() string {
 	}
 }
 
-// Error описывает доменную ошибку с классом, кодом и сообщением.
+// Error describes a domain error with a class, a code and a message.
 type Error struct {
-	// Kind задает класс ошибки.
+	// Kind sets the error class.
 	Kind Kind
-	// Code задает машиночитаемый код, например payment_not_found.
+	// Code sets the machine-readable code, for example payment_not_found.
 	Code string
-	// Message задает человекочитаемое сообщение.
+	// Message sets the human-readable message.
 	Message string
-	// Err задает исходную ошибку для оборачивания.
+	// Err sets the source error for wrapping.
 	Err error
 }
 
-// Error реализует интерфейс error.
+// Error implements the error interface.
 func (e *Error) Error() string {
 	if e == nil {
 		return ""
@@ -72,7 +72,7 @@ func (e *Error) Error() string {
 	return e.Message
 }
 
-// Unwrap возвращает исходную ошибку для errors.Is и errors.As.
+// Unwrap returns the source error for errors.Is and errors.As.
 func (e *Error) Unwrap() error {
 	if e == nil {
 		return nil
@@ -80,12 +80,12 @@ func (e *Error) Unwrap() error {
 	return e.Err
 }
 
-// E создает доменную ошибку с классом, кодом и сообщением.
+// E creates a domain error with a class, a code and a message.
 func E(kind Kind, code, message string, err error) *Error {
 	return &Error{Kind: kind, Code: code, Message: message, Err: err}
 }
 
-// KindOf возвращает класс ошибки; неизвестные ошибки относятся к KindInternal.
+// KindOf returns the error class; unknown errors map to KindInternal.
 func KindOf(err error) Kind {
 	var target *Error
 	if errors.As(err, &target) {
@@ -94,7 +94,7 @@ func KindOf(err error) Kind {
 	return KindInternal
 }
 
-// CodeOf возвращает машиночитаемый код ошибки или пустую строку.
+// CodeOf returns the machine-readable error code or an empty string.
 func CodeOf(err error) string {
 	var target *Error
 	if errors.As(err, &target) {
@@ -103,9 +103,9 @@ func CodeOf(err error) string {
 	return ""
 }
 
-// MapError преобразует ошибку в gRPC-статус.
-// Готовые статусы передаются как есть, доменные ошибки маппятся по классу,
-// неизвестные ошибки скрываются за internal error без утечки деталей.
+// MapError converts an error into a gRPC status.
+// Ready statuses are passed through as is, domain errors are mapped by class,
+// and unknown errors are hidden behind internal error without leaking details.
 func MapError(err error) error {
 	if err == nil {
 		return nil
@@ -124,7 +124,7 @@ func MapError(err error) error {
 	return status.Error(mapKind(target.Kind), message)
 }
 
-// mapKind переводит класс ошибки в gRPC-код.
+// mapKind translates an error class into a gRPC code.
 func mapKind(k Kind) codes.Code {
 	switch k {
 	case KindNotFound:

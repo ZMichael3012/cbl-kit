@@ -1,5 +1,5 @@
-// Пакет hmac реализует подпись и проверку вебхуков платформы CBL.
-// Подпись считается по сырому телу запроса, окно replay ограничено.
+// Package hmac implements signing and verification of CBL platform webhooks.
+// The signature is computed over the raw request body, and the replay window is bounded.
 package hmac
 
 import (
@@ -13,34 +13,34 @@ import (
 	"time"
 )
 
-// DefaultWindow задает допустимое окно расхождения времени подписи.
+// DefaultWindow sets the allowed clock skew window for signature timestamps.
 const DefaultWindow = 5 * time.Minute
 
-// Ошибки пакета возвращаются обернутыми через fmt.Errorf с %w.
+// Package errors are returned wrapped through fmt.Errorf with %w.
 var (
-	// ErrMalformed сообщает о некорректном заголовке подписи.
+	// ErrMalformed reports a malformed signature header.
 	ErrMalformed = errors.New("hmac: malformed header")
-	// ErrSignatureMismatch сообщает о несовпадении подписи.
+	// ErrSignatureMismatch reports a signature mismatch.
 	ErrSignatureMismatch = errors.New("hmac: signature mismatch")
-	// ErrExpired сообщает о выходе метки времени за окно replay.
+	// ErrExpired reports a timestamp outside the replay window.
 	ErrExpired = errors.New("hmac: timestamp outside replay window")
 )
 
-// Signature описывает одну подпись для сборки значения заголовка.
+// Signature describes a single signature for building a header value.
 type Signature struct {
-	// Timestamp задает время подписи.
+	// Timestamp sets the signature time.
 	Timestamp time.Time
-	// Hex задает hex-представление HMAC-SHA256.
+	// Hex sets the hex representation of HMAC-SHA256.
 	Hex string
 }
 
-// Sign вычисляет hex HMAC-SHA256(secret, "<unix>.<body>").
+// Sign computes the hex HMAC-SHA256(secret, "<unix>.<body>").
 func Sign(secret []byte, timestamp time.Time, body []byte) string {
 	return hex.EncodeToString(signRaw(secret, timestamp.Unix(), body))
 }
 
-// BuildHeader собирает заголовок вида t=<unix>,v1=<hex>[,v1=<hex>].
-// Все подписи используют метку времени первой из них.
+// BuildHeader builds a header of the form t=<unix>,v1=<hex>[,v1=<hex>].
+// All signatures use the timestamp of the first one.
 func BuildHeader(signatures ...Signature) string {
 	if len(signatures) == 0 {
 		return ""
@@ -53,8 +53,8 @@ func BuildHeader(signatures ...Signature) string {
 	return strings.Join(parts, ",")
 }
 
-// ParseHeader разбирает заголовок на метку времени и список подписей.
-// Неизвестные части игнорируются для прямой совместимости.
+// ParseHeader parses the header into a timestamp and a list of signatures.
+// Unknown parts are ignored for forward compatibility.
 func ParseHeader(header string) (time.Time, [][]byte, error) {
 	var ts int64 = -1
 	var sigs [][]byte
@@ -91,13 +91,13 @@ func ParseHeader(header string) (time.Time, [][]byte, error) {
 	return time.Unix(ts, 0).UTC(), sigs, nil
 }
 
-// Verify проверяет подпись заголовка для одного секрета.
+// Verify verifies the header signature for a single secret.
 func Verify(secret []byte, header string, body []byte, now time.Time, window time.Duration) error {
 	return VerifyAny([][]byte{secret}, header, body, now, window)
 }
 
-// VerifyAny проверяет, что одна из подписей заголовка совпадает с одним из секретов.
-// Несколько секретов нужны для ротации секрета без простоя.
+// VerifyAny verifies that one of the header signatures matches one of the secrets.
+// Multiple secrets support secret rotation without downtime.
 func VerifyAny(secrets [][]byte, header string, body []byte, now time.Time, window time.Duration) error {
 	ts, sigs, err := ParseHeader(header)
 	if err != nil {
@@ -127,7 +127,7 @@ func VerifyAny(secrets [][]byte, header string, body []byte, now time.Time, wind
 	return ErrSignatureMismatch
 }
 
-// signRaw вычисляет сырой HMAC-SHA256 по правилу платформы.
+// signRaw computes the raw HMAC-SHA256 per the platform rule.
 func signRaw(secret []byte, unix int64, body []byte) []byte {
 	mac := hmac.New(sha256.New, secret)
 	mac.Write([]byte(strconv.FormatInt(unix, 10)))
