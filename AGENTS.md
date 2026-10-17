@@ -69,7 +69,10 @@ cbl-kit is a library: it has no local e2e stand and no PowerShell run scripts; i
 
 ## 5. Development rules
 
-- Pipeline: spec in `.specs/` -> tests (unit; integration under the `integration` tag) -> code.
+- Pipeline (TDD-first, CBL-001): a spec with the architecture sketch and the test plan (unit
+  matrix and integration cases under the `integration` tag) -> red tests with recorded
+  evidence -> implementation -> 4-agent review on the staged diff (no-context, architecture,
+  with-context, security - blocking) -> AGENTS.md -> final runs -> linters -> commit.
 - Unit+integration coverage is at least 80% per repository, for `money` at least 95%.
 - Godoc docstrings are mandatory in English: the first line starts with the entity name and ends with a period; comments explain why; errors are wrapped with `%w`; panics in business code are forbidden.
 - Comments explain why; exported entity names have no abbreviations.
