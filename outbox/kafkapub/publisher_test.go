@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/cbl/cbl-kit/outbox"
-	"github.com/cbl/cbl-kit/outbox/kafkapub"
+	"github.com/ZMichael3012/cbl-kit/outbox"
+	"github.com/ZMichael3012/cbl-kit/outbox/kafkapub"
 )
 
 func TestNewAndClose(t *testing.T) {

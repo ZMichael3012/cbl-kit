@@ -1,4 +1,4 @@
-module github.com/cbl/cbl-kit
+module github.com/ZMichael3012/cbl-kit
 
 go 1.26.0
 

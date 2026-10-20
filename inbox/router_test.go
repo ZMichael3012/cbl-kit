@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cbl/cbl-kit/inbox"
+	"github.com/ZMichael3012/cbl-kit/inbox"
 )
 
 func TestRouterNext(t *testing.T) {

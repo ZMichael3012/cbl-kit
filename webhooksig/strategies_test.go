@@ -12,7 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/cbl/cbl-kit/webhooksig"
+	"github.com/ZMichael3012/cbl-kit/webhooksig"
 )
 
 func header(name, value string) http.Header {

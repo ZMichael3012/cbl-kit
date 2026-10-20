@@ -9,7 +9,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cbl/cbl-kit/ratelimit"
+	"github.com/ZMichael3012/cbl-kit/ratelimit"
 )
 
 func newRedisLimiter(t *testing.T, burst int, interval time.Duration) (*ratelimit.Redis, *miniredis.Miniredis, *fakeClock) {

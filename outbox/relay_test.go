@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/cbl/cbl-kit/outbox"
+	"github.com/ZMichael3012/cbl-kit/outbox"
 )
 
 func TestRelayNotConfigured(t *testing.T) {

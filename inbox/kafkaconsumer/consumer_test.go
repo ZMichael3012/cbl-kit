@@ -5,8 +5,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/cbl/cbl-kit/inbox"
-	"github.com/cbl/cbl-kit/inbox/kafkaconsumer"
+	"github.com/ZMichael3012/cbl-kit/inbox"
+	"github.com/ZMichael3012/cbl-kit/inbox/kafkaconsumer"
 )
 
 func TestNewValidation(t *testing.T) {

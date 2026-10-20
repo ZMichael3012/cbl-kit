@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cbl/cbl-kit/hmac"
+	"github.com/ZMichael3012/cbl-kit/hmac"
 )
 
 func TestSignVerifyRoundTrip(t *testing.T) {

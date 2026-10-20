@@ -12,7 +12,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 
-	"github.com/cbl/cbl-kit/ratelimit"
+	"github.com/ZMichael3012/cbl-kit/ratelimit"
 )
 
 func TestRedisLimiterIntegration(t *testing.T) {

@@ -10,7 +10,7 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 	"go.uber.org/zap"
 
-	"github.com/cbl/cbl-kit/inbox"
+	"github.com/ZMichael3012/cbl-kit/inbox"
 )
 
 // Runner describes the Kafka read loop with manual offset commits.

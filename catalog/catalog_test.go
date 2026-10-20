@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cbl/cbl-kit/catalog"
+	"github.com/ZMichael3012/cbl-kit/catalog"
 )
 
 // baseCatalog is the minimal valid artifact: one asset, one network, every

@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/cbl/cbl-kit/ratelimit"
+	"github.com/ZMichael3012/cbl-kit/ratelimit"
 )
 
 type fakeLimiter struct {

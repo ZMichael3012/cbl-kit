@@ -8,7 +8,7 @@ import (
 
 	"github.com/twmb/franz-go/pkg/kgo"
 
-	"github.com/cbl/cbl-kit/outbox"
+	"github.com/ZMichael3012/cbl-kit/outbox"
 )
 
 // Publisher publishes events to Kafka with an idempotent producer.
