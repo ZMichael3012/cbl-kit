@@ -25,6 +25,7 @@ Out of scope: business logic of services, concrete topics and event schemas (in 
 | `grpcmw` | CBL-1.4 | gRPC services |
 | `outbox` (+ `kafkapub`) | CBL-1.2 | Payment, Ledger, Payout, Webhook Ingress, Reconciler |
 | `inbox` (+ `kafkaconsumer`) | CBL-1.3 | Payment, Ledger, Payout, Connector, Notification |
+| `catalog` | CBL-17.21 | all services (asset codes, decimals and provider codes) |
 
 `hmac` stays the outbound merchant webhook scheme (`t`/`v1` header, CBL-003 section 4
 outbound); `webhooksig` covers inbound provider verification and is registry-driven;
@@ -90,6 +91,7 @@ cbl-kit is a library: it has no local e2e stand and no PowerShell run scripts; i
 | T-KK6 | `storagex.Migrate` extracted into kit | services do not duplicate goose wiring | kit gains a goose dependency | the dependency is only for the migration runtime, not used in business code |
 | T-KK7 | Main wiring (health, metrics stub, getenv) is duplicated in services | the service is autonomous and simple | duplication across 13+ repositories | extraction to cbl-kit/httpx after 0.7, when real metrics appear |
 | T-KK8 | The token bucket (local and Redis Lua) counts tokens in fixed-point micro-units, no floats anywhere | exact refill arithmetic, deterministic tests | integer math is denser; the Redis form uses microsecond granularity | `retryAfter` rounds up, so the wait is never understated; rates below 1 rps are expressed by large intervals |
+| T-KK10 | The canonical catalog artifact lives in `cbl-protos`; the typed parser and validation live in `cbl-kit/catalog`, and the contract-side test mirrors the invariants | the contracts repository stays the source of truth; services get a dependency-free runtime API | the invariants exist twice; the kit cross-check parses the actual artifact from the sibling checkout and skips when absent, while the protos test is the CI gate for data changes |
 | T-KK9 | `ratelimit.WithFallback` switches to the per-process local bucket when Redis fails | the money path degrades instead of failing open | under an outage each replica allows up to its own Burst; a Pause issued during an outage is applied to the fallback only, so after recovery the shared bucket may allow earlier | the fallback config is conservative, `Metrics` reports every switch and every served decision; provider 429 answers are honored via `Pause` while the primary is healthy |
 
 ## 7. Known issues
@@ -109,6 +111,7 @@ cbl-kit is a library: it has no local e2e stand and no PowerShell run scripts; i
 | CBL-1.3 (fix) | 2026-10-14 | done, findings of review 2.7: DLQ fallbacks for poison messages (an invalid event_id is sanitized into `x-original-event-id`; a missing event_type -> `unknown`; a corrupted retry envelope goes to DLQ instead of looping the partition) | `inbox/processor.go`, inbox tests | `cc5d796` |
 | CBL-16.15 | 2026-10-16 | done (English comments and documentation across the library: code, tests, specs, AGENTS.md, README, migrations; the library has no local e2e stand; no code changes) | `.specs/CBL-16.15-conventions.md` | this commit |
 | CBL-12.1 | 2026-10-16 | done (additive error kinds KindUnauthenticated/KindPermissionDenied: gRPC Unauthenticated/PermissionDenied, HTTP 401/403 in AbortFromError; unit tests; AGENTS lint snippet synced with the Makefile image) | `.specs/CBL-12.1-auth-error-kinds.md` | this commit |
+| CBL-17.21 | 2026-10-20 | done (asset and network catalog: strict parser, validation, lookups, 1 MiB bound, canonical artifact cross-check; coverage 89.8%, lint 0; four reviews closed: chain-agnostic provider codes, active-asset rule, artifact size, spec drift) | `.specs/CBL-17.21-asset-catalog.md` | this commit |
 | CBL-17.3 | 2026-10-16 | done (provider primitives: money.ParseJSONNumber/ParseAny float-free parsing with exponent support; new `webhooksig` package - RawHMAC/CanonicalJSONHMAC/TokenEcho strategies, strict canonical JSON serializer, registry; new `ratelimit` package - fixed-point token bucket, Redis Lua shared limiter, local fallback with Metrics, Retry-After helpers; unit coverage money 96.5%, webhooksig 94.4%, ratelimit 94.4%; Redis integration test with testcontainers; golangci-lint 0 issues, govulncheck no reachable vulnerabilities; go-redis v9.23.0 pulls cpuid v2.4.0/go.uber.org/atomic v1.12.0/testify v1.12.1; review follow-up: 128-bit mulDiv refill and retry math (the >2.5 h idle overflow), Redis pause TTL retention and pause TTL units, Retry-After clamp, duplicate-key and trailing-data rejection in the strict JSON decoder, TokenEcho strict decode, registry trim and typed-nil guard, fallback decision metrics) | `.specs/CBL-17.3-kit-primitives.md` | this commit |
 
 ## 9. Runbook

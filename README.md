@@ -5,7 +5,8 @@ verification, rate limiting, Gin and gRPC middleware, transactional outbox, and
 idempotent inbox.
 
 Repository rules and conventions: `AGENTS.md`, global rules `../../AGENTS.md`.
-Task specs: `.specs/CBL-1.*.md`, `.specs/CBL-17.3-kit-primitives.md`.
+Task specs: `.specs/CBL-1.*.md`, `.specs/CBL-17.3-kit-primitives.md`,
+`.specs/CBL-17.21-asset-catalog.md`.
 
 ## Packages
 
@@ -19,6 +20,7 @@ Task specs: `.specs/CBL-1.*.md`, `.specs/CBL-17.3-kit-primitives.md`.
 | `grpcmw` | Interceptors and domain error mapping |
 | `outbox` | Event write within a transaction, relay, kafkapub |
 | `inbox` | Idempotency guard, retry/DLQ, kafkaconsumer |
+| `catalog` | Asset and network catalog parser, validation and provider-code lookups |
 
 ## Commands
 
